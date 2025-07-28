@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BVG Real-Time Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            padding: 10px;
+            z-index: 1000;
+            max-width: 300px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
+        #legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            padding: 10px;
+            z-index: 1000;
+            max-width: 250px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 1px solid #000;
+        }
+        select {
+            margin: 5px 0;
+            width: 100%;
+            padding: 5px;
+        }
+        .demo-banner {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ff6b35;
+            color: white;
+            text-align: center;
+            padding: 5px;
+            z-index: 2000;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-banner">
+        🚌 Demo Mode: Displaying simulated BVG data - Real backend required for live tracking
+    </div>
+    
+    <div id="map"></div>
+    
+    <div id="controls">
+        <h3>BVG Bus Tracker</h3>
+        <label for="routeSelect">Select a bus line:</label>
+        <select id="routeSelect">
+            <option value="">Loading routes...</option>
+        </select>
+        <div id="vehicleSelectContainer" style="display: none;">
+            <label for="vehicleSelect">Select vehicle:</label>
+            <select id="vehicleSelect">
+                <option value="">All vehicles</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="legend">
+        <h4 style="margin: 0 0 10px 0;">Legend</h4>
+        <div id="legend-content">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #808080;"></div>
+                <span>Demo mode - simulated data</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
