@@ -146,34 +146,6 @@ spring.web.cors.allowed-origins=*
 spring.web.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
 ```
 
-## 🌐 Deployment Options
-
-### Option 1: Railway (Current)
-- **Automatic deployment** from GitHub repository
-- **Custom domain** support with SSL
-- **Docker-based** deployment with multi-stage builds
-- **Monitoring** and logging included
-
-### Option 2: Alternative Services
-- **Render**: Similar to Railway with free tier
-- **Heroku**: Traditional PaaS with Git-based deployment
-- **DigitalOcean App Platform**: Container-based deployment
-- **AWS/Azure**: Enterprise-level hosting options
-
-## 🎨 Customization
-
-### Frontend Customization
-- **Map styling**: Modify tile layer in `app.js`
-- **Color scheme**: Update destination colors in `getColorForDestination()`
-- **UI layout**: Customize CSS in `index.html`
-- **Update intervals**: Adjust refresh rates for different performance needs
-
-### Backend Customization
-- **API endpoints**: Modify controllers for additional functionality
-- **Data sources**: Extend service layer for other transport APIs
-- **Update frequency**: Adjust `@Scheduled` intervals in `SimulationService`
-- **Geographic scope**: Update radar coordinates for different cities
-
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how to get started:
@@ -194,15 +166,6 @@ Contributions are welcome! Here's how to get started:
 
 This project is open source and available under the [MIT License](LICENSE).
 
-## 🙏 Acknowledgments
-
-- **BVG (Berliner Verkehrsbetriebe)** for providing the public transport API
-- **OpenStreetMap** contributors for comprehensive map data
-- **Leaflet.js** team for the excellent mapping library
-- **Spring Boot** community for the robust framework
-- **Railway** for reliable hosting infrastructure
-
----
 
 - **Backend:** Spring Boot REST & Server‑Sent Events (SSE)
 - **Frontend:** Leaflet map with route selection & live markers
