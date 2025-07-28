@@ -155,6 +155,21 @@ public class SimulationService {
                         
                         System.out.println("Found " + matchingVehicles + " vehicles for route " + routeId);
                         
+                        // If no vehicles found for the requested route, switch to most active line
+                        final String effectiveRouteId;
+                        if (matchingVehicles == 0) {
+                            String mostActiveLine = lineCounts.entrySet().stream()
+                                .filter(entry -> entry.getKey().contains("(bus)") || entry.getKey().contains("(train)"))
+                                .max(Map.Entry.comparingByValue())
+                                .map(entry -> entry.getKey().split(" \\(")[0]) // Extract line name without mode
+                                .orElse("255");
+                            
+                            System.out.println("No vehicles for " + routeId + ", switching to most active line: " + mostActiveLine);
+                            effectiveRouteId = mostActiveLine;
+                        } else {
+                            effectiveRouteId = routeId;
+                        }
+                        
                         movements.stream()
                             .filter(movement -> {
                                 @SuppressWarnings("unchecked")
@@ -162,8 +177,8 @@ public class SimulationService {
                                 if (line != null) {
                                     String lineName = (String) line.get("name");
                                     String lineMode = (String) line.get("mode");
-                                    // Look for exact match of route name and accept both buses and trains
-                                    boolean isMatch = ("bus".equals(lineMode) || "train".equals(lineMode)) && routeId.equals(lineName);
+                                    // Use effective route ID (either original or most active)
+                                    boolean isMatch = ("bus".equals(lineMode) || "train".equals(lineMode)) && effectiveRouteId.equals(lineName);
                                     if (isMatch) {
                                         System.out.println("Found matching vehicle for line: " + lineName + " (mode: " + lineMode + ")");
                                     }
