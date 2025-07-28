@@ -1,6 +1,6 @@
-# Z-TransitSim
+# BVGSim
 
-Real-time Berlin U‑bahn tracker using BVG’s GTFS-Realtime feed:
+Real-time BerlinBus tracker using BVG’s GTFS-Realtime feed:
 
 - **Backend:** Spring Boot REST & Server‑Sent Events (SSE)
 - **Frontend:** Leaflet map with route selection & live markers
