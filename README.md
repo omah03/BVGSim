@@ -91,7 +91,7 @@ The application is deployed and running live on Railway:
 
 ## 📱 How to Use
 
-1. **🚌 Select a bus line** from the dropdown menu (shows most active lines first)
+1. **🚌 Select a bus line** from the dropdown menu (shows ONLY most active lines first)
 2. **🎯 Choose specific vehicle** or view all vehicles on the selected line
 3. **📍 Enable location tracking** to find nearest buses and calculate distances
 4. **🖱️ Click vehicle markers** for detailed information including destination and position
