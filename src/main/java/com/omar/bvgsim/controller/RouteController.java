@@ -51,7 +51,9 @@ public class RouteController {
                                 Map<String, Object> line = (Map<String, Object>) movement.get("line");
                                 String lineName = (String) line.get("name");
                                 String lineMode = (String) line.get("mode");
-                                if ("bus".equals(lineMode) || "train".equals(lineMode)) {
+                                // Only include lines that actually appear in radar data (bus and U-Bahn)
+                                // Exclude S-Bahn lines as they don't appear consistently in radar
+                                if ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U"))) {
                                     return lineName;
                                 }
                                 return null;
@@ -87,6 +89,11 @@ public class RouteController {
             }
         } catch (Exception e) {
             System.err.println("Error getting top active lines: " + e.getMessage());
+            
+            // If it's a temporary API issue, return last known good data or minimal fallback
+            if (e.getMessage() != null && (e.getMessage().contains("503") || e.getMessage().contains("Service Unavailable"))) {
+                System.out.println("BVG API temporarily down, using fallback lines...");
+            }
         }
         
         // Fallback to some common Berlin lines if API fails
@@ -129,7 +136,8 @@ public class RouteController {
                     List<Map<String, Object>> vehicles = new ArrayList<>();
                     AtomicInteger vehicleCounter = new AtomicInteger(1);
                     
-                    movements.stream()
+                    // First, try to find vehicles for the exact line
+                    long exactMatches = movements.stream()
                         .filter(movement -> {
                             @SuppressWarnings("unchecked")
                             Map<String, Object> line = (Map<String, Object>) movement.get("line");
@@ -137,6 +145,50 @@ public class RouteController {
                                 String lineName = (String) line.get("name");
                                 String lineMode = (String) line.get("mode");
                                 return ("bus".equals(lineMode) || "train".equals(lineMode)) && lineId.equals(lineName);
+                            }
+                            return false;
+                        }).count();
+                    
+                    // If no exact matches, find the most active line and use that
+                    String effectiveLineId = lineId;
+                    if (exactMatches == 0) {
+                        Map<String, Long> lineCounts = movements.stream()
+                            .filter(movement -> movement.get("line") != null)
+                            .collect(Collectors.groupingBy(
+                                movement -> {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> line = (Map<String, Object>) movement.get("line");
+                                    String lineName = (String) line.get("name");
+                                    String lineMode = (String) line.get("mode");
+                                    if ("bus".equals(lineMode) || "train".equals(lineMode)) {
+                                        return lineName;
+                                    }
+                                    return null;
+                                },
+                                Collectors.counting()
+                            ));
+                        
+                        lineCounts.remove(null);
+                        
+                        if (!lineCounts.isEmpty()) {
+                            effectiveLineId = lineCounts.entrySet().stream()
+                                .max(Map.Entry.comparingByValue())
+                                .map(Map.Entry::getKey)
+                                .orElse(lineId);
+                            
+                            System.out.println("No vehicles found for line " + lineId + ", using most active line: " + effectiveLineId);
+                        }
+                    }
+                    
+                    final String finalEffectiveLineId = effectiveLineId;
+                    movements.stream()
+                        .filter(movement -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> line = (Map<String, Object>) movement.get("line");
+                            if (line != null) {
+                                String lineName = (String) line.get("name");
+                                String lineMode = (String) line.get("mode");
+                                return ("bus".equals(lineMode) || "train".equals(lineMode)) && finalEffectiveLineId.equals(lineName);
                             }
                             return false;
                         })
@@ -148,7 +200,8 @@ public class RouteController {
                             
                             if (location != null) {
                                 Map<String, Object> vehicleInfo = new HashMap<>();
-                                vehicleInfo.put("id", "Bus " + lineId + "-" + vehicleCounter.getAndIncrement());
+                                // Use the effective line ID for vehicle naming to match the backend
+                                vehicleInfo.put("id", "Bus " + finalEffectiveLineId + "-" + vehicleCounter.getAndIncrement());
                                 vehicleInfo.put("tripId", tripId);
                                 vehicleInfo.put("destination", direction != null ? direction : "Unknown destination");
                                 vehicleInfo.put("latitude", location.get("latitude"));

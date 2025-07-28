@@ -5,6 +5,24 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
 
 let userLocationMarker = null;
 let watchId = null;
+let lastUpdateTime = Date.now();
+
+function updateStatus(message, isError = false) {
+  const statusDiv = document.getElementById('status');
+  if (statusDiv) {
+    statusDiv.textContent = message;
+    statusDiv.style.color = isError ? '#ff4444' : '#666';
+  }
+}
+
+function checkConnectionStatus() {
+  const now = Date.now();
+  if (now - lastUpdateTime > 15000) { // No updates for 15 seconds
+    updateStatus('⚠️ Connection issues - retrying...', true);
+  } else {
+    updateStatus('🟢 Live tracking active');
+  }
+}
 
 function updateUserLocation(position) {
   const lat = position.coords.latitude;
@@ -289,6 +307,10 @@ fetch('/api/routes/top-lines').then(r=>r.json()).then(lines=>{
   }
   
   addLocationControls();
+  
+  // Check connection status every 5 seconds
+  setInterval(checkConnectionStatus, 5000);
+  updateStatus('🔄 Connecting...');
 }).catch(err => {
   console.error('Error loading lines:', err);
   fetch('/api/routes').then(r=>r.json()).then(routes=>{
@@ -345,32 +367,49 @@ function addLocationControls() {
 }
 
 function loadVehiclesForLine(lineId) {
+  console.log('Loading vehicles for line:', lineId);
+  
+  // Clear any existing vehicle dropdown more reliably
+  const existingVehicleDiv = document.querySelector('#controls > div:last-child');
+  if (existingVehicleDiv && (existingVehicleDiv.innerHTML.includes('Select vehicle') || existingVehicleDiv.querySelector('#vehicleSelect'))) {
+    console.log('Removing existing vehicle dropdown');
+    existingVehicleDiv.remove();
+  }
+  
   fetch(`/api/routes/vehicles/${lineId}`).then(r=>r.json()).then(vehicles=>{
-    const vehicleSelect = document.getElementById('vehicleSelect');
-    if (!vehicleSelect) {
-      const controls = document.getElementById('controls');
-      const vehicleDiv = document.createElement('div');
-      vehicleDiv.style.marginTop = '10px';
-      vehicleDiv.innerHTML = `
-        <label for="vehicleSelect">Select vehicle:</label>
-        <select id="vehicleSelect">
-          <option value="">All vehicles on line ${lineId}</option>
-        </select>
-      `;
-      controls.appendChild(vehicleDiv);
+    console.log('Found vehicles for line', lineId, ':', vehicles);
+    
+    // Double-check that any existing vehicle dropdown is removed
+    const existingSelect = document.getElementById('vehicleSelect');
+    if (existingSelect) {
+      console.log('Removing existing vehicleSelect element');
+      existingSelect.closest('div').remove();
     }
     
+    const controls = document.getElementById('controls');
+    const vehicleDiv = document.createElement('div');
+    vehicleDiv.style.marginTop = '10px';
+    vehicleDiv.innerHTML = `
+      <label for="vehicleSelect">Select vehicle on ${lineId}:</label>
+      <select id="vehicleSelect">
+        <option value="">All vehicles on line ${lineId}</option>
+      </select>
+    `;
+    controls.appendChild(vehicleDiv);
+    
     const vSelect = document.getElementById('vehicleSelect');
-    vSelect.innerHTML = `<option value="">All vehicles on line ${lineId}</option>`;
+    console.log('Adding', vehicles.length, 'vehicles to dropdown');
     
     vehicles.forEach(vehicle => {
       const o = document.createElement('option');
       o.value = vehicle.id;
-      o.textContent = `${vehicle.id} → ${vehicle.destination}`;
+      o.textContent = `${vehicle.id} → ${vehicle.destination || 'Unknown destination'}`;
       vSelect.appendChild(o);
+      console.log('Added vehicle option:', vehicle.id, '→', vehicle.destination);
     });
     
     vSelect.onchange = e => {
+      console.log('Vehicle selection changed to:', e.target.value);
       if (e.target.value) {
         startSingleVehicleStream(lineId, e.target.value);
       } else {
@@ -378,9 +417,12 @@ function loadVehiclesForLine(lineId) {
       }
     };
     
+    // Start streaming all vehicles for this line
     startStream(lineId);
   }).catch(err => {
-    console.error('Error loading vehicles:', err);
+    console.error('Error loading vehicles for line', lineId, ':', err);
+    updateStatus('⚠️ Error loading vehicles - using live data', true);
+    // Still start streaming even if vehicle list fails
     startStream(lineId);
   });
 }
@@ -503,6 +545,7 @@ function highlight(id){
 }
 
 function startStream(routeId){
+  console.log('Starting stream for route:', routeId);
   highlight(routeId);
   
   // Reset destination colors for new route
@@ -512,17 +555,43 @@ function startStream(routeId){
   // Fetch and display the actual route path
   fetchRoutePath(routeId);
   
-  if(es) es.close();
+  // Close existing SSE connection
+  if(es) {
+    console.log('Closing existing SSE connection');
+    es.close();
+  }
+  
+  // Clear all existing markers
   Object.values(markers).forEach(m=>map.removeLayer(m));
   markers={};
 
-  es = new EventSource(`/api/sim/stream/${routeId}`);
+  // Create new SSE connection
+  const streamUrl = `/api/sim/stream/${routeId}`;
+  console.log('Opening SSE connection to:', streamUrl);
+  es = new EventSource(streamUrl);
+  
+  es.onopen = function() {
+    console.log('SSE connection opened for route:', routeId);
+    updateStatus('🟢 Connected to live data');
+    lastUpdateTime = Date.now();
+  };
+  
+  es.onerror = function(error) {
+    console.error('SSE connection error:', error);
+    updateStatus('❌ Connection error - retrying...', true);
+  };
+  
   es.onmessage = e=>{
+    lastUpdateTime = Date.now(); // Track last update
+    updateStatus('🟢 Live tracking active');
+    
     const loc = JSON.parse(e.data);
     const k = loc.vehicleId;
     const ll = [loc.lat,loc.lon];
     const destination = loc.destination || 'Unknown destination';
     const busColor = getColorForDestination(destination);
+    
+    console.log(`Received vehicle update: ${k} at ${ll[0]},${ll[1]} → ${destination}`);
     
     if(!markers[k]){
       // Create a custom bus icon with color based on destination
@@ -604,6 +673,9 @@ function startSingleVehicleStream(routeId, vehicleId) {
 
   es = new EventSource(`/api/sim/stream/${routeId}`);
   es.onmessage = e=>{
+    lastUpdateTime = Date.now(); // Track last update
+    updateStatus('🟢 Live tracking active');
+    
     const loc = JSON.parse(e.data);
     const k = loc.vehicleId;
     
