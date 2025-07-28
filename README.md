@@ -7,13 +7,13 @@ A comprehensive real-time bus tracking application for Berlin's BVG public trans
 ## 📱 Application Screenshots
 
 ### Real-Time Vehicle Tracking
-*Screenshot showing live BVG buses on Berlin map with color-coded destinations*
+<img width="3838" height="1857" alt="image" src="https://github.com/user-attachments/assets/006e78fd-fedf-4d13-b37c-535ad75f730d" />
 
 ### Geolocation & Nearest Vehicle Detection
-*Screenshot showing user location and distance to nearest bus*
+<img width="2781" height="1255" alt="image" src="https://github.com/user-attachments/assets/705d1438-2a84-44eb-a52d-f5deaf08842a" />
 
 ### Individual Vehicle Tracking Mode
-*Screenshot showing single vehicle tracking with detailed information*
+<img width="1752" height="1166" alt="image" src="https://github.com/user-attachments/assets/1312e7d5-c5a1-4345-8261-aca1983070d0" />
 
 ### Mobile Responsive Design
 *Screenshot showing mobile interface*
