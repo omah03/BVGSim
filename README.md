@@ -29,7 +29,7 @@ Currently supports the most active bus, more to come.
 - **⚡ Server-sent events** for real-time updates every 3 seconds
 - **📱 Responsive design** optimized for desktop and mobile devices
 - **🛣️ Live route visualization** with actual BVG line data and stop information
-- **📊 Dynamic line selection** based on vehicle activity and availability
+- **📊 Dynamic line selection** based on vehicle activity and availability (SOON)
 
 ## 🛠️ Tech Stack
 
