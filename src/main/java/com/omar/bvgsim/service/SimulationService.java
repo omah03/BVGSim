@@ -74,7 +74,6 @@ public class SimulationService {
                             java.util.stream.Collectors.counting()
                         ));
                     
-                    // Remove null entries and get most active line
                     lineCounts.remove(null);
                     
                     if (!lineCounts.isEmpty()) {
@@ -89,7 +88,6 @@ public class SimulationService {
                         System.out.println(mostActiveLine + ": " + vehicleCount + " vehicles");
                         System.out.println("========================");
                         
-                        // Ensure we have emitters for the most active line
                         if (!emitters.containsKey(mostActiveLine)) {
                             emitters.put(mostActiveLine, new CopyOnWriteArrayList<>());
                         }
@@ -107,8 +105,7 @@ public class SimulationService {
             if (subs == null || subs.isEmpty()) return;
             
             try {
-                // Use the radar endpoint to get real-time vehicle positions in Berlin area
-                // This covers the entire Berlin metropolitan area
+
                 String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=50&frames=1";
                 System.out.println("Fetching radar data from BVG API...");
                 
@@ -144,7 +141,6 @@ public class SimulationService {
                             });
                         System.out.println("==========================================");
                         
-                        // Filter vehicles for the specific route we're interested in
                         long matchingVehicles = movements.stream()
                             .filter(movement -> {
                                 @SuppressWarnings("unchecked")
@@ -191,7 +187,6 @@ public class SimulationService {
                                             String originalTripId = (String) movement.get("tripId");
                                             String direction = (String) movement.get("direction");
                                             
-                                            // Extract destination information
                                             String destination = direction;
                                             if (destination == null || destination.trim().isEmpty()) {
                                                 destination = "Unknown destination";
@@ -199,12 +194,9 @@ public class SimulationService {
                                             
                                             String vehicleId;
                                             
-                                            // Create clean, readable vehicle IDs
                                             if (originalTripId != null) {
-                                                // Check if we already have a clean ID for this trip
                                                 vehicleId = tripIdToCleanId.get(originalTripId);
                                                 if (vehicleId == null) {
-                                                    // Create a new clean ID like "Bus 255-1", "Bus 255-2", etc.
                                                     vehicleId = "Bus " + routeId + "-" + vehicleCounter++;
                                                     tripIdToCleanId.put(originalTripId, vehicleId);
                                                 }
@@ -220,7 +212,6 @@ public class SimulationService {
                                             
                                             System.out.println("Broadcasting real vehicle: " + vehicleId + " at " + lat + "," + lon + " to " + destination);
                                             
-                                            // Broadcast to all subscribers
                                             subs.forEach(emitter -> {
                                                 try {
                                                     emitter.send(loc);
