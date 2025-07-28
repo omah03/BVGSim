@@ -16,7 +16,7 @@ A comprehensive real-time bus tracking application for Berlin's BVG public trans
 <img width="1752" height="1166" alt="image" src="https://github.com/user-attachments/assets/1312e7d5-c5a1-4345-8261-aca1983070d0" />
 
 ### Mobile Responsive Design
-*Screenshot showing mobile interface*
+![image0](https://github.com/user-attachments/assets/4918481d-c87b-4523-8ff9-4b948d8f545b)
 
 ## 🚌 Key Features
 
