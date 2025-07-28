@@ -31,15 +31,36 @@ public class SimulationService {
 
     @PostConstruct
     public void init() {
-        loader.getAll().forEach(route -> {
-            emitters.put(route.getId(), new CopyOnWriteArrayList<>());
-        });
+        // Initialize with some common lines, but updateAvailableLines will add the real active ones
+        String[] commonLines = {"255", "100", "200", "M41", "U1", "U2"};
+        for (String lineId : commonLines) {
+            emitters.put(lineId, new CopyOnWriteArrayList<>());
+        }
+        
+        // Update with real active lines immediately
+        updateAvailableLines();
     }
 
     public SseEmitter subscribe(String routeId) {
         SseEmitter emitter = new SseEmitter(0L);
-        emitters.get(routeId).add(emitter);
-        emitter.onCompletion(() -> emitters.get(routeId).remove(emitter));
+        
+        // Ensure emitter list exists for this route
+        emitters.computeIfAbsent(routeId, k -> new CopyOnWriteArrayList<>()).add(emitter);
+        
+        emitter.onCompletion(() -> {
+            List<SseEmitter> routeEmitters = emitters.get(routeId);
+            if (routeEmitters != null) {
+                routeEmitters.remove(emitter);
+            }
+        });
+        
+        emitter.onTimeout(() -> {
+            List<SseEmitter> routeEmitters = emitters.get(routeId);
+            if (routeEmitters != null) {
+                routeEmitters.remove(emitter);
+            }
+        });
+        
         return emitter;
     }
 

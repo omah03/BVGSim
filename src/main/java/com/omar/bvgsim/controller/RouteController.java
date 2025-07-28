@@ -62,34 +62,55 @@ public class RouteController {
                     lineCounts.remove(null);
                     
                     if (!lineCounts.isEmpty()) {
-                        String mostActiveLineId = lineCounts.entrySet().stream()
-                            .max(Map.Entry.comparingByValue())
-                            .map(Map.Entry::getKey)
-                            .orElse("255"); 
+                        // Get top 3 most active lines
+                        List<Map<String, Object>> topLines = lineCounts.entrySet().stream()
+                            .sorted((e1, e2) -> Long.compare(e2.getValue(), e1.getValue())) // Sort by count descending
+                            .limit(3) // Take only top 3
+                            .map(entry -> {
+                                Map<String, Object> lineInfo = new HashMap<>();
+                                lineInfo.put("id", entry.getKey());
+                                lineInfo.put("name", "Line " + entry.getKey() + " (Berlin Transport)");
+                                lineInfo.put("vehicleCount", entry.getValue());
+                                return lineInfo;
+                            })
+                            .collect(Collectors.toList());
                         
-                        long maxVehicleCount = lineCounts.get(mostActiveLineId);
+                        System.out.println("=== TOP 3 ACTIVE LINES ===");
+                        topLines.forEach(line -> {
+                            System.out.println(line.get("id") + ": " + line.get("vehicleCount") + " vehicles");
+                        });
+                        System.out.println("===========================");
                         
-                        System.out.println("Most active line: " + mostActiveLineId + " with " + maxVehicleCount + " vehicles");
-                        
-                        // Return only the most active line
-                        Map<String, Object> lineInfo = new HashMap<>();
-                        lineInfo.put("id", mostActiveLineId);
-                        lineInfo.put("name", "Line " + mostActiveLineId + " (Most Active)");
-                        lineInfo.put("vehicleCount", maxVehicleCount);
-                        return List.of(lineInfo);
+                        return topLines;
                     }
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error getting most active line: " + e.getMessage());
+            System.err.println("Error getting top active lines: " + e.getMessage());
         }
         
-        // Fallback to static line 255 entry
-        Map<String, Object> fallbackLine255 = new HashMap<>();
-        fallbackLine255.put("id", "255");
-        fallbackLine255.put("name", "Bus Line 255 (Fallback)");
-        fallbackLine255.put("vehicleCount", 0L);
-        return List.of(fallbackLine255);
+        // Fallback to some common Berlin lines if API fails
+        List<Map<String, Object>> fallbackLines = new ArrayList<>();
+        
+        Map<String, Object> fallback1 = new HashMap<>();
+        fallback1.put("id", "255");
+        fallback1.put("name", "Bus Line 255 (Fallback)");
+        fallback1.put("vehicleCount", 0L);
+        fallbackLines.add(fallback1);
+        
+        Map<String, Object> fallback2 = new HashMap<>();
+        fallback2.put("id", "100");
+        fallback2.put("name", "Bus Line 100 (Fallback)");
+        fallback2.put("vehicleCount", 0L);
+        fallbackLines.add(fallback2);
+        
+        Map<String, Object> fallback3 = new HashMap<>();
+        fallback3.put("id", "200");
+        fallback3.put("name", "Bus Line 200 (Fallback)");
+        fallback3.put("vehicleCount", 0L);
+        fallbackLines.add(fallback3);
+        
+        return fallbackLines;
     }
     
     @GetMapping("/vehicles/{lineId}")

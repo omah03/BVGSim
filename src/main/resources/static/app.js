@@ -264,9 +264,9 @@ function updateLegendWithDistance() {
 let es, markers = {}, polylines = {}, routePaths = {}, vehicleTrips = {}, destinationColors = {};
 
 fetch('/api/routes/top-lines').then(r=>r.json()).then(lines=>{
-  console.log('Loaded lines:', lines);
+  console.log('Loaded top active lines:', lines);
   const sel = document.getElementById('routeSelect');
-  sel.innerHTML = '<option value="">Select a line first...</option>';
+  sel.innerHTML = '<option value="">Select a line...</option>';
   
   lines.forEach((line,i)=>{
     const o = document.createElement('option');
@@ -281,7 +281,9 @@ fetch('/api/routes/top-lines').then(r=>r.json()).then(lines=>{
     }
   };
   
+  // Automatically select the most active line (first in the list)
   if (lines.length > 0) {
+    console.log('Auto-selecting most active line:', lines[0].id);
     sel.value = lines[0].id;
     loadVehiclesForLine(lines[0].id);
   }
