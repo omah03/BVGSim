@@ -97,7 +97,7 @@ The application is deployed and running live on Railway:
 5. **🎨 Use the legend** to understand color coding for different destinations
 6. **📱 Works seamlessly** on both desktop and mobile devices
 
-## 🗺️ API Integration
+##  API Integration
 
 This application integrates with multiple BVG and Berlin transport APIs:
 
@@ -201,15 +201,7 @@ This project is open source and available under the [MIT License](LICENSE).
 - **Spring Boot** community for the robust framework
 - **Railway** for reliable hosting infrastructure
 
-## 📞 Contact & Support
-
-- **Repository**: [github.com/omah03/BVGSim](https://github.com/omah03/BVGSim)
-- **Issues**: Use GitHub Issues for bug reports and feature requests
-- **Live Demo**: [bvgsim-production.up.railway.app](https://bvgsim-production.up.railway.app)
-
 ---
-
-**Made with ❤️ in Berlin** 🐻 **Real-time public transport for everyone!**eal-time BerlinBus tracker using BVG’s GTFS-Realtime feed:
 
 - **Backend:** Spring Boot REST & Server‑Sent Events (SSE)
 - **Frontend:** Leaflet map with route selection & live markers
