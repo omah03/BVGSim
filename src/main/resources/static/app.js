@@ -436,6 +436,7 @@ async function fetchRoutePath(routeId) {
       delete routePaths[routeId];
     }
     
+    // Try to get stops data first
     const stopsResponse = await fetch(`https://v6.bvg.transport.rest/stops?query=${routeId}&results=50`);
     if (stopsResponse.ok) {
       const stopsData = await stopsResponse.json();
@@ -443,7 +444,7 @@ async function fetchRoutePath(routeId) {
       
       if (stopsData.stops && stopsData.stops.length > 0) {
         const lineStops = stopsData.stops.filter(stop => 
-          stop.products && stop.products.bus === true
+          stop.products && (stop.products.bus === true || stop.products.subway === true)
         );
         
         if (lineStops.length > 1) {
@@ -454,22 +455,27 @@ async function fetchRoutePath(routeId) {
       }
     }
     
-    const lineResponse = await fetch(`https://v6.bvg.transport.rest/lines/${routeId}`);
-    if (lineResponse.ok) {
-      const lineData = await lineResponse.json();
-      console.log('Line data for', routeId, lineData);
-      
-      if (lineData && lineData.shape) {
-        const coords = lineData.shape.map(point => [point.latitude, point.longitude]);
-        drawRoutePath(routeId, coords, null);
-        return;
+    // If stops method doesn't work, try the lines endpoint
+    try {
+      const lineResponse = await fetch(`https://v6.bvg.transport.rest/lines/${routeId}`);
+      if (lineResponse.ok) {
+        const lineData = await lineResponse.json();
+        console.log('Line data for', routeId, lineData);
+        
+        if (lineData && lineData.shape) {
+          const coords = lineData.shape.map(point => [point.latitude, point.longitude]);
+          drawRoutePath(routeId, coords, null);
+          return;
+        }
       }
+    } catch (lineError) {
+      console.log('Lines endpoint not available for', routeId);
     }
     
-    console.log('Could not fetch route path for', routeId);
+    console.log('No route path data available for', routeId, '- this is normal for some lines');
     
   } catch (error) {
-    console.log('Error fetching route path:', error);
+    console.log('Error fetching route path:', error, '- continuing without route path');
   }
 }
 

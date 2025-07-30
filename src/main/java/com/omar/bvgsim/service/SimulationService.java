@@ -64,7 +64,7 @@ public class SimulationService {
         return emitter;
     }
 
-    @Scheduled(fixedRate = 30000)
+        @Scheduled(fixedRate = 30000)
     public void updateAvailableLines() {
         try {
             String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=100&frames=1";
@@ -81,23 +81,27 @@ public class SimulationService {
                     // Count vehicles by line - ONLY include those that actually appear in radar data
                     Map<String, Long> lineCounts = movements.stream()
                         .filter(movement -> movement.get("line") != null)
+                        .map(movement -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> line = (Map<String, Object>) movement.get("line");
+                            if (line == null) return null;
+                            
+                            String lineName = (String) line.get("name");
+                            String lineMode = (String) line.get("mode");
+                            
+                            // Only include lines that actually appear in radar data (bus and U-Bahn)
+                            // Exclude S-Bahn lines as they don't appear consistently in radar
+                            if (lineName != null && lineMode != null && 
+                                ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U")))) {
+                                return lineName;
+                            }
+                            return null;
+                        })
+                        .filter(lineName -> lineName != null) // Remove all null values
                         .collect(java.util.stream.Collectors.groupingBy(
-                            movement -> {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> line = (Map<String, Object>) movement.get("line");
-                                String lineName = (String) line.get("name");
-                                String lineMode = (String) line.get("mode");
-                                // Only include lines that actually appear in radar data (bus and U-Bahn)
-                                // Exclude S-Bahn lines as they don't appear consistently in radar
-                                if ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U"))) {
-                                    return lineName;
-                                }
-                                return null;
-                            },
+                            lineName -> lineName,
                             java.util.stream.Collectors.counting()
                         ));
-                    
-                    lineCounts.remove(null);
                     
                     if (!lineCounts.isEmpty()) {
                         String mostActiveLine = lineCounts.entrySet().stream()

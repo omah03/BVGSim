@@ -45,23 +45,26 @@ public class RouteController {
                 if (movements != null && !movements.isEmpty()) {
                     Map<String, Long> lineCounts = movements.stream()
                         .filter(movement -> movement.get("line") != null)
+                        .map(movement -> {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> line = (Map<String, Object>) movement.get("line");
+                            if (line == null) return null;
+                            
+                            String lineName = (String) line.get("name");
+                            String lineMode = (String) line.get("mode");
+                            // Only include lines that actually appear in radar data (bus and U-Bahn)
+                            // Exclude S-Bahn lines as they don't appear consistently in radar
+                            if (lineName != null && lineMode != null && 
+                                ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U")))) {
+                                return lineName;
+                            }
+                            return null;
+                        })
+                        .filter(lineName -> lineName != null) // Remove all null values
                         .collect(Collectors.groupingBy(
-                            movement -> {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> line = (Map<String, Object>) movement.get("line");
-                                String lineName = (String) line.get("name");
-                                String lineMode = (String) line.get("mode");
-                                // Only include lines that actually appear in radar data (bus and U-Bahn)
-                                // Exclude S-Bahn lines as they don't appear consistently in radar
-                                if ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U"))) {
-                                    return lineName;
-                                }
-                                return null;
-                            },
+                            lineName -> lineName,
                             Collectors.counting()
                         ));
-                    
-                    lineCounts.remove(null);
                     
                     if (!lineCounts.isEmpty()) {
                         // Get top 3 most active lines
