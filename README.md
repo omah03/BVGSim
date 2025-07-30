@@ -1,22 +1,23 @@
 # BVG Real-Time Bus Tracker
 
 A comprehensive real-time bus tracking application for Berlin's BVG public transport system, featuring interactive maps, geolocation tracking, and color-coded destinations.
+Currently supports the most active bus, more to come.
 
 🌐 **[Live Application](https://bvgsim-production.up.railway.app)** | 🎮 **[Demo Version](https://omah03.github.io/BVGSim/)** | 📂 **[Source Code](https://github.com/omah03/BVGSim)**
 
 ## 📱 Application Screenshots
 
 ### Real-Time Vehicle Tracking
-*Screenshot showing live BVG buses on Berlin map with color-coded destinations*
+<img width="3838" height="1857" alt="image" src="https://github.com/user-attachments/assets/006e78fd-fedf-4d13-b37c-535ad75f730d" />
 
 ### Geolocation & Nearest Vehicle Detection
-*Screenshot showing user location and distance to nearest bus*
+<img width="2781" height="1255" alt="image" src="https://github.com/user-attachments/assets/705d1438-2a84-44eb-a52d-f5deaf08842a" />
 
 ### Individual Vehicle Tracking Mode
-*Screenshot showing single vehicle tracking with detailed information*
+<img width="1752" height="1166" alt="image" src="https://github.com/user-attachments/assets/1312e7d5-c5a1-4345-8261-aca1983070d0" />
 
 ### Mobile Responsive Design
-*Screenshot showing mobile interface*
+![image0](https://github.com/user-attachments/assets/4918481d-c87b-4523-8ff9-4b948d8f545b)
 
 ## 🚌 Key Features
 
@@ -28,7 +29,7 @@ A comprehensive real-time bus tracking application for Berlin's BVG public trans
 - **⚡ Server-sent events** for real-time updates every 3 seconds
 - **📱 Responsive design** optimized for desktop and mobile devices
 - **🛣️ Live route visualization** with actual BVG line data and stop information
-- **📊 Dynamic line selection** based on vehicle activity and availability
+- **📊 Dynamic line selection** based on vehicle activity and availability (SOON)
 
 ## 🛠️ Tech Stack
 
@@ -90,7 +91,7 @@ The application is deployed and running live on Railway:
 
 ## 📱 How to Use
 
-1. **🚌 Select a bus line** from the dropdown menu (shows most active lines first)
+1. **🚌 Select a bus line** from the dropdown menu (shows ONLY most active lines first)
 2. **🎯 Choose specific vehicle** or view all vehicles on the selected line
 3. **📍 Enable location tracking** to find nearest buses and calculate distances
 4. **🖱️ Click vehicle markers** for detailed information including destination and position
@@ -145,34 +146,6 @@ spring.web.cors.allowed-origins=*
 spring.web.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
 ```
 
-## 🌐 Deployment Options
-
-### Option 1: Railway (Current)
-- **Automatic deployment** from GitHub repository
-- **Custom domain** support with SSL
-- **Docker-based** deployment with multi-stage builds
-- **Monitoring** and logging included
-
-### Option 2: Alternative Services
-- **Render**: Similar to Railway with free tier
-- **Heroku**: Traditional PaaS with Git-based deployment
-- **DigitalOcean App Platform**: Container-based deployment
-- **AWS/Azure**: Enterprise-level hosting options
-
-## 🎨 Customization
-
-### Frontend Customization
-- **Map styling**: Modify tile layer in `app.js`
-- **Color scheme**: Update destination colors in `getColorForDestination()`
-- **UI layout**: Customize CSS in `index.html`
-- **Update intervals**: Adjust refresh rates for different performance needs
-
-### Backend Customization
-- **API endpoints**: Modify controllers for additional functionality
-- **Data sources**: Extend service layer for other transport APIs
-- **Update frequency**: Adjust `@Scheduled` intervals in `SimulationService`
-- **Geographic scope**: Update radar coordinates for different cities
-
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how to get started:
@@ -193,15 +166,6 @@ Contributions are welcome! Here's how to get started:
 
 This project is open source and available under the [MIT License](LICENSE).
 
-## 🙏 Acknowledgments
-
-- **BVG (Berliner Verkehrsbetriebe)** for providing the public transport API
-- **OpenStreetMap** contributors for comprehensive map data
-- **Leaflet.js** team for the excellent mapping library
-- **Spring Boot** community for the robust framework
-- **Railway** for reliable hosting infrastructure
-
----
 
 - **Backend:** Spring Boot REST & Server‑Sent Events (SSE)
 - **Frontend:** Leaflet map with route selection & live markers
