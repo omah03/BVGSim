@@ -2,8 +2,7 @@
 
 A comprehensive real-time bus tracking application for Berlin's BVG public transport system, featuring interactive maps, geolocation tracking, and color-coded destinations.
 Currently supports the most active bus, more to come.
-
-🌐 **[Live Application](https://bvgsim-production.up.railway.app)** | 🎮 **[Demo Version](https://omah03.github.io/BVGSim/)** | 📂 **[Source Code](https://github.com/omah03/BVGSim)**
+ **[Live Application](https://bvgsim-production.up.railway.app)** |  **[Demo Version](https://omah03.github.io/BVGSim/)** |  **[Source Code](https://github.com/omah03/BVGSim)**
 
 ## 📱 Application Screenshots
 
@@ -21,17 +20,17 @@ Currently supports the most active bus, more to come.
 
 ## 🚌 Key Features
 
-- **🔴 Real-time tracking** of BVG buses and trains using the official BVG API v6
-- **🗺️ Interactive map** with Leaflet.js showing live vehicle positions across Berlin
-- **🎨 Color-coded destinations** for easy route identification and direction tracking
-- **📍 Geolocation support** to find and track nearest vehicles with distance calculations
-- **🚌 Individual vehicle tracking** with detailed route information and following mode
-- **⚡ Server-sent events** for real-time updates every 3 seconds
-- **📱 Responsive design** optimized for desktop and mobile devices
-- **🛣️ Live route visualization** with actual BVG line data and stop information
-- **📊 Dynamic line selection** based on vehicle activity and availability (SOON)
+- ** Real-time tracking** of BVG buses and trains using the official BVG API v6
+- ** Interactive map** with Leaflet.js showing live vehicle positions across Berlin
+- ** Color-coded destinations** for easy route identification and direction tracking
+- ** Geolocation support** to find and track nearest vehicles with distance calculations
+- ** Individual vehicle tracking** with detailed route information and following mode
+- ** Server-sent events** for real-time updates every 3 seconds
+- ** Responsive design** optimized for desktop and mobile devices
+- ** Live route visualization** with actual BVG line data and stop information
+- ** Dynamic line selection** based on vehicle activity and availability (SOON)
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 ### Backend
 - **Java 17** with Spring Boot 3.1.4
@@ -47,7 +46,7 @@ Currently supports the most active bus, more to come.
 - **EventSource API** for real-time updates via Server-Sent Events
 - **Leaflet.js** for interactive maps and custom markers
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 - Java 17 or higher
@@ -91,12 +90,12 @@ The application is deployed and running live on Railway:
 
 ## 📱 How to Use
 
-1. **🚌 Select a bus line** from the dropdown menu (shows ONLY most active lines first)
-2. **🎯 Choose specific vehicle** or view all vehicles on the selected line
-3. **📍 Enable location tracking** to find nearest buses and calculate distances
-4. **🖱️ Click vehicle markers** for detailed information including destination and position
-5. **🎨 Use the legend** to understand color coding for different destinations
-6. **📱 Works seamlessly** on both desktop and mobile devices
+1. ** Select a bus line** from the dropdown menu (shows ONLY most active lines first)
+2. ** Choose specific vehicle** or view all vehicles on the selected line
+3. ** Enable location tracking** to find nearest buses and calculate distances
+4. ** Click vehicle markers** for detailed information including destination and position
+5. ** Use the legend** to understand color coding for different destinations
+6. ** Works seamlessly** on both desktop and mobile devices
 
 ##  API Integration
 
@@ -107,7 +106,7 @@ This application integrates with multiple BVG and Berlin transport APIs:
 - **OpenStreetMap**: Base map tiles and geographic data
 - **Geolocation API**: User positioning and distance calculations
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 src/
@@ -146,7 +145,7 @@ spring.web.cors.allowed-origins=*
 spring.web.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
 ```
 
-## 🤝 Contributing
+##  Contributing
 
 Contributions are welcome! Here's how to get started:
 
@@ -162,7 +161,7 @@ Contributions are welcome! Here's how to get started:
 - Test locally before submitting PRs
 - Update documentation for new features
 
-## 📝 License
+##  License
 
 This project is open source and available under the [MIT License](LICENSE).
 
