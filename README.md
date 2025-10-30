@@ -81,14 +81,14 @@ docker build -t bvgsim .
 docker run -p 8080:8080 bvgsim
 ```
 
-## 🌐 Live Deployment
+##  Live Deployment
 
 The application is deployed and running live on Railway:
 - **Production URL:** https://bvgsim-production.up.railway.app
 - **Deployment:** Automated via GitHub integration
 - **Infrastructure:** Railway with Docker containerization
 
-## 📱 How to Use
+##  How to Use
 
 1. ** Select a bus line** from the dropdown menu (shows ONLY most active lines first)
 2. ** Choose specific vehicle** or view all vehicles on the selected line
@@ -132,7 +132,7 @@ src/
     └── application.properties          # Spring Boot configuration
 ```
 
-## 🔧 Configuration
+##  Configuration
 
 ### Environment Variables
 - `SERVER_PORT`: Application port (default: 8080)
