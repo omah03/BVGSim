@@ -4,7 +4,7 @@ A comprehensive real-time bus tracking application for Berlin's BVG public trans
 Currently supports the most active bus, more to come.
  **[Live Application](https://bvgsim-production.up.railway.app)** |  **[Demo Version](https://omah03.github.io/BVGSim/)** |  **[Source Code](https://github.com/omah03/BVGSim)**
 
-## 📱 Application Screenshots
+##  Application Screenshots
 
 ### Real-Time Vehicle Tracking
 <img width="3838" height="1857" alt="image" src="https://github.com/user-attachments/assets/006e78fd-fedf-4d13-b37c-535ad75f730d" />
