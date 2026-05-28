@@ -76,6 +76,29 @@ public class RouteController {
             .collect(Collectors.toList());
     }
 
+    @GetMapping("/vehicles")
+    public List<Map<String, Object>> getAllVehicles() {
+        Map<String, AtomicInteger> vehicleCounters = new HashMap<>();
+
+        return fetchRadarMovements().stream()
+            .map(movement -> {
+                String lineId = extractBusLineName(movement);
+                if (lineId == null) {
+                    return null;
+                }
+
+                int sequenceNumber = vehicleCounters
+                    .computeIfAbsent(lineId, key -> new AtomicInteger(1))
+                    .getAndIncrement();
+                return toVehicleInfo(lineId, movement, sequenceNumber);
+            })
+            .filter(Objects::nonNull)
+            .sorted(Comparator
+                .comparing((Map<String, Object> vehicle) -> vehicle.get("lineId").toString(), this::compareLineIds)
+                .thenComparing(vehicle -> vehicle.get("id").toString()))
+            .collect(Collectors.toList());
+    }
+
     private List<Map<String, Object>> fetchRadarMovements() {
         try {
             @SuppressWarnings("unchecked")

@@ -1,7 +1,7 @@
 # BVG Real-Time Bus Tracker
 
 A comprehensive real-time bus tracking application for Berlin's BVG public transport system, featuring interactive maps, geolocation tracking, and color-coded destinations.
-Lists active bus lines and lets you select a line or track an individual bus.
+Shows active buses across Berlin by default, with filters for a line or an individual bus.
  **[Live Application](https://bvgsim-production.up.railway.app)** |  **[Demo Version](https://omah03.github.io/BVGSim/)** |  **[Source Code](https://github.com/omah03/BVGSim)**
 
 ##  Application Screenshots
@@ -90,8 +90,8 @@ The application is deployed and running live on Railway:
 
 ##  How to Use
 
-1. ** Select a bus line** from the dropdown menu
-2. ** Choose specific vehicle** or view all vehicles on the selected line
+1. ** View all active buses** across available BVG bus lines
+2. ** Filter by bus line** or choose a specific vehicle to track
 3. ** Enable location tracking** to find nearest buses and calculate distances
 4. ** Click vehicle markers** for detailed information including destination and position
 5. ** Use the legend** to understand color coding for different destinations
