@@ -16,11 +16,20 @@ function updateStatus(message, isError = false) {
 }
 
 function checkConnectionStatus() {
+  if (!selectedLineId) {
+    updateStatus('Select a bus line to begin.');
+    return;
+  }
+
   const now = Date.now();
   if (now - lastUpdateTime > 15000) { // No updates for 15 seconds
-    updateStatus('⚠️ Connection issues - retrying...', true);
+    if (Object.keys(markers).length === 0) {
+      updateStatus(`Waiting for live bus positions on line ${selectedLineId}...`);
+      return;
+    }
+    updateStatus('Connection issues - retrying...', true);
   } else {
-    updateStatus('🟢 Live tracking active');
+    updateStatus('Live tracking active');
   }
 }
 
@@ -254,7 +263,7 @@ function updateLegendWithDistance() {
     distanceItem.style.marginBottom = '8px';
     distanceItem.innerHTML = `
       <div class="legend-color" style="background-color: #007BFF;"></div>
-      <span><strong>Nearest bus:</strong><br>${nearestBus.vehicleId}<br>${Math.round(nearestBus.distance)}m away</span>
+      <span><strong>Nearest bus:</strong><br>${escapeHtml(nearestBus.vehicleId)}<br>${Math.round(nearestBus.distance)}m away</span>
     `;
     legendContent.appendChild(distanceItem);
   }
@@ -264,77 +273,130 @@ function updateLegendWithDistance() {
     legendItem.className = 'legend-item';
     legendItem.innerHTML = `
       <div class="legend-color" style="background-color: ${color};"></div>
-      <span>${destination}</span>
+      <span>${escapeHtml(destination)}</span>
     `;
     legendContent.appendChild(legendItem);
   });
   
   if (Object.keys(destinationColors).length === 0 && !nearestBus) {
+    const emptyText = selectedLineId ? 'Waiting for live bus destinations...' : 'Select a line to see destinations';
     legendContent.innerHTML = `
       <div class="legend-item">
         <div class="legend-color" style="background-color: #808080;"></div>
-        <span>Loading destinations...</span>
+        <span>${emptyText}</span>
       </div>
     `;
   }
 }
 
-let es, markers = {}, polylines = {}, routePaths = {}, vehicleTrips = {}, destinationColors = {};
+let es, markers = {}, polylines = {}, routePaths = {}, routeStopMarkers = {}, vehicleTrips = {}, destinationColors = {};
+let selectedLineId = '';
+let selectedVehicleId = '';
+let hasFitCurrentSelection = false;
 
-fetch('/api/routes/top-lines').then(r=>r.json()).then(lines=>{
-  console.log('Loaded top active lines:', lines);
-  const sel = document.getElementById('routeSelect');
-  sel.innerHTML = '<option value="">Select a line...</option>';
-  
-  lines.forEach((line,i)=>{
-    const o = document.createElement('option');
-    o.value = line.id; 
-    o.textContent = `${line.id} — ${line.name} (${line.vehicleCount} vehicles)`;
-    sel.appendChild(o);
+initializeSelectors();
+
+async function initializeSelectors() {
+  const lineSelect = document.getElementById('routeSelect');
+  lineSelect.disabled = true;
+  lineSelect.innerHTML = '<option value="">Loading active lines...</option>';
+  clearVehicleSelect('Choose a line first', true);
+
+  try {
+    const lines = await fetchJson('/api/routes/lines');
+    populateLineSelect(lines);
+    updateStatus(lines.length ? 'Select a bus line to begin.' : 'No active bus lines found right now.', lines.length === 0);
+  } catch (err) {
+    console.error('Error loading active lines:', err);
+    try {
+      const fallbackRoutes = await fetchJson('/api/routes');
+      populateLineSelect(fallbackRoutes.map(route => ({
+        id: route.id,
+        name: route.name,
+        vehicleCount: 0
+      })));
+      updateStatus('Live line list is unavailable. Showing fallback routes.', true);
+    } catch (fallbackErr) {
+      console.error('Error loading fallback routes:', fallbackErr);
+      populateLineSelect([]);
+      updateStatus('Could not load bus lines. Please refresh in a moment.', true);
+    }
+  }
+
+  addLocationControls();
+  setInterval(checkConnectionStatus, 5000);
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+
+function populateLineSelect(lines) {
+  const lineSelect = document.getElementById('routeSelect');
+  lineSelect.disabled = lines.length === 0;
+  lineSelect.innerHTML = '<option value="">Select a bus line...</option>';
+
+  lines.forEach(line => {
+    const option = document.createElement('option');
+    option.value = line.id;
+    option.textContent = formatLineLabel(line);
+    lineSelect.appendChild(option);
   });
-  
-  sel.onchange = e => {
-    if (e.target.value) {
-      loadVehiclesForLine(e.target.value);
+
+  lineSelect.onchange = event => {
+    selectedLineId = event.target.value;
+    selectedVehicleId = '';
+
+    if (selectedLineId) {
+      loadVehiclesForLine(selectedLineId);
+    } else {
+      resetSelection();
     }
   };
-  
-  // Automatically select the most active line (first in the list)
-  if (lines.length > 0) {
-    console.log('Auto-selecting most active line:', lines[0].id);
-    sel.value = lines[0].id;
-    loadVehiclesForLine(lines[0].id);
-  }
-  
-  addLocationControls();
-  
-  // Check connection status every 5 seconds
-  setInterval(checkConnectionStatus, 5000);
-  updateStatus('🔄 Connecting...');
-}).catch(err => {
-  console.error('Error loading lines:', err);
-  fetch('/api/routes').then(r=>r.json()).then(routes=>{
-    console.log('Fallback to routes:', routes);
-    const sel = document.getElementById('routeSelect');
-    routes.forEach((route,i)=>{
-      const o = document.createElement('option');
-      o.value = route.id; 
-      o.textContent = route.id + '—' + route.name;
-      sel.appendChild(o);
-      if(i===0) startStream(route.id);
-    });
-    sel.onchange = e=>startStream(e.target.value);
-    addLocationControls();
-  });
-});
+}
+
+function formatLineLabel(line) {
+  const vehicleCount = Number(line.vehicleCount || 0);
+  const countLabel = vehicleCount === 1 ? '1 active bus' : `${vehicleCount} active buses`;
+  return `${line.id} - ${line.name || `Bus Line ${line.id}`} (${countLabel})`;
+}
+
+function clearVehicleSelect(message, disabled) {
+  const vehicleSelect = document.getElementById('vehicleSelect');
+  if (!vehicleSelect) return;
+
+  vehicleSelect.disabled = disabled;
+  vehicleSelect.innerHTML = '';
+
+  const option = document.createElement('option');
+  option.value = '';
+  option.textContent = message;
+  vehicleSelect.appendChild(option);
+}
+
+function resetSelection() {
+  selectedLineId = '';
+  selectedVehicleId = '';
+  closeStream();
+  clearVehicleMarkers();
+  clearRouteOverlays();
+  destinationColors = {};
+  updateLegendWithDistance();
+  clearVehicleSelect('Choose a line first', true);
+  updateStatus('Select a bus line to begin.');
+}
 
 function addLocationControls() {
   const locationControl = document.createElement('div');
   locationControl.id = 'location-control';
   locationControl.style.cssText = `
     position: absolute;
-    top: 60px;
-    left: 10px;
+    top: 184px;
+    left: 12px;
     background: white;
     border: 2px solid rgba(0,0,0,0.2);
     border-radius: 4px;
@@ -353,6 +415,7 @@ function addLocationControls() {
       stopLocationTracking();
       locationControl.innerHTML = '📍';
       locationControl.style.backgroundColor = 'white';
+      locationControl.style.color = '#333';
       isTracking = false;
     } else {
       startLocationTracking();
@@ -364,78 +427,142 @@ function addLocationControls() {
   };
   
   document.body.appendChild(locationControl);
+
+  const positionLocationControl = () => {
+    const controls = document.getElementById('controls');
+    if (controls) {
+      locationControl.style.top = `${controls.offsetTop + controls.offsetHeight + 10}px`;
+    }
+  };
+  positionLocationControl();
+  window.addEventListener('resize', positionLocationControl);
 }
 
-function loadVehiclesForLine(lineId) {
+async function loadVehiclesForLine(lineId) {
   console.log('Loading vehicles for line:', lineId);
-  
-  // Clear any existing vehicle dropdown more reliably
-  const existingVehicleDiv = document.querySelector('#controls > div:last-child');
-  if (existingVehicleDiv && (existingVehicleDiv.innerHTML.includes('Select vehicle') || existingVehicleDiv.querySelector('#vehicleSelect'))) {
-    console.log('Removing existing vehicle dropdown');
-    existingVehicleDiv.remove();
-  }
-  
-  fetch(`/api/routes/vehicles/${lineId}`).then(r=>r.json()).then(vehicles=>{
-    console.log('Found vehicles for line', lineId, ':', vehicles);
-    
-    // Double-check that any existing vehicle dropdown is removed
-    const existingSelect = document.getElementById('vehicleSelect');
-    if (existingSelect) {
-      console.log('Removing existing vehicleSelect element');
-      existingSelect.closest('div').remove();
+  selectedVehicleId = '';
+  hasFitCurrentSelection = false;
+  clearVehicleSelect(`Loading buses on line ${lineId}...`, true);
+  updateStatus(`Loading buses on line ${lineId}...`);
+
+  try {
+    const vehicles = await fetchJson(`/api/routes/vehicles/${encodeURIComponent(lineId)}`);
+    if (selectedLineId !== lineId) {
+      return;
     }
-    
-    const controls = document.getElementById('controls');
-    const vehicleDiv = document.createElement('div');
-    vehicleDiv.style.marginTop = '10px';
-    vehicleDiv.innerHTML = `
-      <label for="vehicleSelect">Select vehicle on ${lineId}:</label>
-      <select id="vehicleSelect">
-        <option value="">All vehicles on line ${lineId}</option>
-      </select>
-    `;
-    controls.appendChild(vehicleDiv);
-    
-    const vSelect = document.getElementById('vehicleSelect');
-    console.log('Adding', vehicles.length, 'vehicles to dropdown');
-    
-    vehicles.forEach(vehicle => {
-      const o = document.createElement('option');
-      o.value = vehicle.id;
-      o.textContent = `${vehicle.id} → ${vehicle.destination || 'Unknown destination'}`;
-      vSelect.appendChild(o);
-      console.log('Added vehicle option:', vehicle.id, '→', vehicle.destination);
-    });
-    
-    vSelect.onchange = e => {
-      console.log('Vehicle selection changed to:', e.target.value);
-      if (e.target.value) {
-        startSingleVehicleStream(lineId, e.target.value);
-      } else {
-        startStream(lineId);
-      }
-    };
-    
-    // Start streaming all vehicles for this line
+
+    populateVehicleSelect(lineId, vehicles);
+    fitToVehicleLocations(vehicles);
     startStream(lineId);
-  }).catch(err => {
+  } catch (err) {
     console.error('Error loading vehicles for line', lineId, ':', err);
-    updateStatus('⚠️ Error loading vehicles - using live data', true);
-    // Still start streaming even if vehicle list fails
+    if (selectedLineId !== lineId) {
+      return;
+    }
+
+    clearVehicleSelect('Bus list unavailable', true);
+    updateStatus('Could not load the bus list. Showing live line data.', true);
     startStream(lineId);
+  }
+}
+
+function populateVehicleSelect(lineId, vehicles) {
+  const vehicleSelect = document.getElementById('vehicleSelect');
+  if (!vehicleSelect) return;
+
+  vehicleSelect.innerHTML = '';
+
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = vehicles.length > 0 ? `All buses on line ${lineId}` : `No active buses found on line ${lineId}`;
+  vehicleSelect.appendChild(allOption);
+
+  vehicles.forEach(vehicle => {
+    const option = document.createElement('option');
+    option.value = vehicle.id;
+    option.textContent = `${vehicle.id} - ${vehicle.destination || 'Unknown destination'}`;
+    vehicleSelect.appendChild(option);
   });
+
+  vehicleSelect.disabled = false;
+  vehicleSelect.onchange = event => {
+    selectedVehicleId = event.target.value;
+    hasFitCurrentSelection = false;
+
+    if (selectedVehicleId) {
+      startSingleVehicleStream(lineId, selectedVehicleId);
+    } else {
+      startStream(lineId);
+    }
+  };
+}
+
+function closeStream() {
+  if (es) {
+    es.close();
+    es = null;
+  }
+}
+
+function clearVehicleMarkers() {
+  Object.values(markers).forEach(marker => map.removeLayer(marker));
+  markers = {};
+}
+
+function clearRouteOverlays() {
+  Object.values(routePaths).forEach(path => map.removeLayer(path));
+  routePaths = {};
+
+  Object.values(routeStopMarkers).flat().forEach(stopMarker => map.removeLayer(stopMarker));
+  routeStopMarkers = {};
+}
+
+function fitToVehicleLocations(vehicles) {
+  const coordinates = vehicles
+    .map(vehicle => [
+      Number(vehicle.latitude ?? vehicle.lat),
+      Number(vehicle.longitude ?? vehicle.lon)
+    ])
+    .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+
+  if (coordinates.length === 1) {
+    map.setView(coordinates[0], 14);
+    hasFitCurrentSelection = true;
+  } else if (coordinates.length > 1) {
+    map.fitBounds(L.latLngBounds(coordinates), { padding: [40, 40], maxZoom: 15 });
+    hasFitCurrentSelection = true;
+  }
+}
+
+function fitVisibleMarkersOnce(singleZoom = 14) {
+  if (hasFitCurrentSelection) {
+    return;
+  }
+
+  const markerPositions = Object.values(markers).map(marker => marker.getLatLng());
+  if (markerPositions.length === 1) {
+    map.setView(markerPositions[0], singleZoom);
+    hasFitCurrentSelection = true;
+  } else if (markerPositions.length > 1) {
+    map.fitBounds(L.latLngBounds(markerPositions), { padding: [40, 40], maxZoom: 15 });
+    hasFitCurrentSelection = true;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
 }
 
 async function fetchRoutePath(routeId) {
   try {
     console.log('Fetching route path for line', routeId);
-    
-    if (routePaths[routeId]) {
-      map.removeLayer(routePaths[routeId]);
-      delete routePaths[routeId];
-    }
-    
+
     // Try to get stops data first
     const stopsResponse = await fetch(`https://v6.bvg.transport.rest/stops?query=${routeId}&results=50`);
     if (stopsResponse.ok) {
@@ -448,6 +575,7 @@ async function fetchRoutePath(routeId) {
         );
         
         if (lineStops.length > 1) {
+          if (selectedLineId !== routeId) return;
           const coords = lineStops.map(stop => [stop.location.latitude, stop.location.longitude]);
           drawRoutePath(routeId, coords, lineStops);
           return;
@@ -463,6 +591,7 @@ async function fetchRoutePath(routeId) {
         console.log('Line data for', routeId, lineData);
         
         if (lineData && lineData.shape) {
+          if (selectedLineId !== routeId) return;
           const coords = lineData.shape.map(point => [point.latitude, point.longitude]);
           drawRoutePath(routeId, coords, null);
           return;
@@ -509,6 +638,10 @@ async function fetchVehicleDestination(tripId, vehicleId) {
 }
 
 function drawRoutePath(routeId, coords, stops) {
+  if (selectedLineId !== routeId) {
+    return;
+  }
+
   if (coords.length > 1) {
     routePaths[routeId] = L.polyline(coords, {
       color: '#FF6B35',
@@ -518,24 +651,26 @@ function drawRoutePath(routeId, coords, stops) {
     }).addTo(map);
     
     const popupText = stops ? 
-      `Bus ${routeId} Route (${stops.length} stops)` : 
-      `Bus ${routeId} Route Path`;
+      `Bus ${escapeHtml(routeId)} Route (${stops.length} stops)` :
+      `Bus ${escapeHtml(routeId)} Route Path`;
     routePaths[routeId].bindPopup(popupText);
     
     console.log('Drew route path for', routeId, 'with', coords.length, 'coordinates');
     
     // Also add stop markers if we have them
     if (stops) {
+      routeStopMarkers[routeId] = [];
       stops.forEach((stop, index) => {
         const isTerminal = index === 0 || index === stops.length - 1;
-        L.circleMarker([stop.location.latitude, stop.location.longitude], {
+        const stopMarker = L.circleMarker([stop.location.latitude, stop.location.longitude], {
           radius: isTerminal ? 6 : 4,
           fillColor: isTerminal ? '#FF0000' : '#FFFF00',
           color: '#000',
           weight: 1,
           opacity: 1,
           fillOpacity: 0.8
-        }).addTo(map).bindPopup(`${stop.name}<br>Bus ${routeId} Stop`);
+        }).addTo(map).bindPopup(`${escapeHtml(stop.name)}<br>Bus ${escapeHtml(routeId)} Stop`);
+        routeStopMarkers[routeId].push(stopMarker);
       });
     }
   }
@@ -552,6 +687,8 @@ function highlight(id){
 
 function startStream(routeId){
   console.log('Starting stream for route:', routeId);
+  selectedLineId = routeId;
+  selectedVehicleId = '';
   highlight(routeId);
   
   // Reset destination colors for new route
@@ -559,17 +696,14 @@ function startStream(routeId){
   updateLegendWithDistance();
   
   // Fetch and display the actual route path
+  clearRouteOverlays();
   fetchRoutePath(routeId);
   
   // Close existing SSE connection
-  if(es) {
-    console.log('Closing existing SSE connection');
-    es.close();
-  }
+  closeStream();
   
   // Clear all existing markers
-  Object.values(markers).forEach(m=>map.removeLayer(m));
-  markers={};
+  clearVehicleMarkers();
 
   // Create new SSE connection
   const streamUrl = `/api/sim/stream/${routeId}`;
@@ -578,24 +712,27 @@ function startStream(routeId){
   
   es.onopen = function() {
     console.log('SSE connection opened for route:', routeId);
-    updateStatus('🟢 Connected to live data');
+    updateStatus(`Connected. Showing all buses on line ${routeId}.`);
     lastUpdateTime = Date.now();
   };
   
   es.onerror = function(error) {
     console.error('SSE connection error:', error);
-    updateStatus('❌ Connection error - retrying...', true);
+    updateStatus('Connection error - retrying...', true);
   };
   
   es.onmessage = e=>{
     lastUpdateTime = Date.now(); // Track last update
-    updateStatus('🟢 Live tracking active');
+    updateStatus(`Live tracking active for line ${routeId}.`);
     
     const loc = JSON.parse(e.data);
     const k = loc.vehicleId;
     const ll = [loc.lat,loc.lon];
     const destination = loc.destination || 'Unknown destination';
     const busColor = getColorForDestination(destination);
+    const safeVehicleId = escapeHtml(k);
+    const safeRouteId = escapeHtml(routeId);
+    const safeDestination = escapeHtml(destination);
     
     console.log(`Received vehicle update: ${k} at ${ll[0]},${ll[1]} → ${destination}`);
     
@@ -619,9 +756,9 @@ function startStream(routeId){
       
       // Set popup content with destination and color explanation
       markers[k].bindPopup(`
-        <strong>${k}</strong><br>
-        Route: ${routeId}<br>
-        Heading to: <strong style="color: ${busColor};">${destination}</strong><br>
+        <strong>${safeVehicleId}</strong><br>
+        Route: ${safeRouteId}<br>
+        Heading to: <strong style="color: ${busColor};">${safeDestination}</strong><br>
         Position: ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}<br>
         <small>Color represents destination direction</small>
       `);
@@ -649,9 +786,9 @@ function startStream(routeId){
       
       // Update popup with current position and destination
       markers[k].setPopupContent(`
-        <strong>${k}</strong><br>
-        Route: ${routeId}<br>
-        Heading to: <strong style="color: ${busColor};">${destination}</strong><br>
+        <strong>${safeVehicleId}</strong><br>
+        Route: ${safeRouteId}<br>
+        Heading to: <strong style="color: ${busColor};">${safeDestination}</strong><br>
         Position: ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}<br>
         <small>Color represents destination direction</small>
       `);
@@ -659,11 +796,15 @@ function startStream(routeId){
     
     // Update distance information
     updateLegendWithDistance();
+    fitVisibleMarkersOnce();
   };
 }
 
 // Function to track a single specific vehicle
 function startSingleVehicleStream(routeId, vehicleId) {
+  selectedLineId = routeId;
+  selectedVehicleId = vehicleId;
+  hasFitCurrentSelection = false;
   highlight(routeId);
   
   // Reset destination colors for new route
@@ -671,16 +812,26 @@ function startSingleVehicleStream(routeId, vehicleId) {
   updateLegendWithDistance();
   
   // Fetch and display the actual route path
+  clearRouteOverlays();
   fetchRoutePath(routeId);
   
-  if(es) es.close();
-  Object.values(markers).forEach(m=>map.removeLayer(m));
-  markers={};
+  closeStream();
+  clearVehicleMarkers();
 
   es = new EventSource(`/api/sim/stream/${routeId}`);
+  es.onopen = function() {
+    updateStatus(`Tracking ${vehicleId} on line ${routeId}.`);
+    lastUpdateTime = Date.now();
+  };
+
+  es.onerror = function(error) {
+    console.error('SSE connection error:', error);
+    updateStatus('Connection error - retrying...', true);
+  };
+
   es.onmessage = e=>{
     lastUpdateTime = Date.now(); // Track last update
-    updateStatus('🟢 Live tracking active');
+    updateStatus(`Tracking ${vehicleId} on line ${routeId}.`);
     
     const loc = JSON.parse(e.data);
     const k = loc.vehicleId;
@@ -693,6 +844,9 @@ function startSingleVehicleStream(routeId, vehicleId) {
     const ll = [loc.lat,loc.lon];
     const destination = loc.destination || 'Unknown destination';
     const busColor = getColorForDestination(destination);
+    const safeVehicleId = escapeHtml(k);
+    const safeRouteId = escapeHtml(routeId);
+    const safeDestination = escapeHtml(destination);
     
     if(!markers[k]){
       // Create a larger, more prominent icon for single vehicle tracking
@@ -714,23 +868,24 @@ function startSingleVehicleStream(routeId, vehicleId) {
       
       // Set popup content with destination and color explanation
       markers[k].bindPopup(`
-        <strong>${k}</strong> (TRACKING)<br>
-        Route: ${routeId}<br>
-        Heading to: <strong style="color: ${busColor};">${destination}</strong><br>
+        <strong>${safeVehicleId}</strong> (TRACKING)<br>
+        Route: ${safeRouteId}<br>
+        Heading to: <strong style="color: ${busColor};">${safeDestination}</strong><br>
         Position: ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}<br>
         <small>Single vehicle tracking mode</small>
       `);
       
       // Center map on the tracked vehicle
       map.setView(ll, 15);
+      hasFitCurrentSelection = true;
     } else {
       markers[k].setLatLng(ll);
       
       // Update popup with current position and destination
       markers[k].setPopupContent(`
-        <strong>${k}</strong> (TRACKING)<br>
-        Route: ${routeId}<br>
-        Heading to: <strong style="color: ${busColor};">${destination}</strong><br>
+        <strong>${safeVehicleId}</strong> (TRACKING)<br>
+        Route: ${safeRouteId}<br>
+        Heading to: <strong style="color: ${busColor};">${safeDestination}</strong><br>
         Position: ${ll[0].toFixed(5)}, ${ll[1].toFixed(5)}<br>
         <small>Single vehicle tracking mode</small>
       `);

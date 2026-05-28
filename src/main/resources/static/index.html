@@ -3,15 +3,66 @@
 <head>
   <title>BVGSim Map</title>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet"
         href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
-    body,html {margin:0;padding:0;height:100%;}
+    body,html {
+      margin:0;
+      padding:0;
+      height:100%;
+      font-family: Arial, sans-serif;
+    }
     #controls {
-      position:absolute; top:10px; left:50%;
-      transform:translateX(-50%);
-      background:white; padding:5px 10px;
-      border-radius:4px; z-index:1000;
+      position:absolute;
+      top:12px;
+      left:12px;
+      width:min(340px, calc(100vw - 24px));
+      background:rgba(255,255,255,0.96);
+      padding:12px;
+      border-radius:8px;
+      z-index:1000;
+      border:1px solid rgba(0,0,0,0.18);
+      box-shadow:0 2px 12px rgba(0,0,0,0.18);
+      box-sizing:border-box;
+    }
+    .control-title {
+      font-weight:700;
+      font-size:16px;
+      color:#1f2933;
+      margin-bottom:10px;
+    }
+    .control-group {
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+      margin-top:8px;
+    }
+    .control-group label {
+      font-size:12px;
+      color:#3d4b5c;
+      font-weight:700;
+    }
+    select {
+      width:100%;
+      min-height:36px;
+      padding:7px 9px;
+      border:1px solid #b8c2cc;
+      border-radius:6px;
+      background:white;
+      color:#102a43;
+      font-size:14px;
+      box-sizing:border-box;
+    }
+    select:disabled {
+      color:#6b7280;
+      background:#f4f6f8;
+    }
+    #status {
+      margin-top:10px;
+      font-size:12px;
+      line-height:1.35;
+      color:#52606d;
     }
     #legend {
       position:absolute; bottom:20px; right:20px;
@@ -41,19 +92,43 @@
       flex-shrink: 0;
     }
     #map {height:100%;}
+    @media (max-width: 640px) {
+      #controls {
+        top:8px;
+        left:8px;
+        width:calc(100vw - 16px);
+      }
+      #legend {
+        right:8px;
+        bottom:12px;
+        max-width:calc(100vw - 40px);
+      }
+    }
   </style>
 </head>
 <body>
-  <div id="controls">
-    <select id="routeSelect" style="display: none;"></select>
-    <div id="status" style="margin-top: 5px; font-size: 11px; color: #666;"></div>
+  <div id="controls" aria-label="Bus tracking controls">
+    <div class="control-title">BVG Bus Tracker</div>
+    <div class="control-group">
+      <label for="routeSelect">Line</label>
+      <select id="routeSelect">
+        <option value="">Loading active lines...</option>
+      </select>
+    </div>
+    <div class="control-group" id="vehicleSelectContainer">
+      <label for="vehicleSelect">Bus</label>
+      <select id="vehicleSelect" disabled>
+        <option value="">Choose a line first</option>
+      </select>
+    </div>
+    <div id="status">Loading active bus lines...</div>
   </div>
   <div id="legend">
     <h4>Bus Destinations</h4>
     <div id="legend-content">
       <div class="legend-item">
         <div class="legend-color" style="background-color: #808080;"></div>
-        <span>Loading destinations...</span>
+        <span>Select a line to see destinations</span>
       </div>
     </div>
   </div>

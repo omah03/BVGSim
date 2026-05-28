@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -26,13 +27,11 @@ public class SimulationService {
     
     private final RestTemplate restTemplate = new RestTemplate();
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
-    private final Map<String, String> tripIdToCleanId = new ConcurrentHashMap<>();
-    private int vehicleCounter = 1;
 
     @PostConstruct
     public void init() {
         // Initialize with some common lines, but updateAvailableLines will add the real active ones
-        String[] commonLines = {"255", "100", "200", "M41", "U1", "U2"};
+        String[] commonLines = {"100", "200", "255", "M29", "M41", "M45", "M48", "M49", "X10"};
         for (String lineId : commonLines) {
             emitters.put(lineId, new CopyOnWriteArrayList<>());
         }
@@ -64,11 +63,11 @@ public class SimulationService {
         return emitter;
     }
 
-        @Scheduled(fixedRate = 30000)
+    @Scheduled(fixedRate = 30000)
     public void updateAvailableLines() {
         try {
-            String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=100&frames=1";
-            System.out.println("Checking for most active lines from BVG radar API...");
+            String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=256&frames=1";
+            System.out.println("Checking for active bus lines from BVG radar API...");
             
             @SuppressWarnings("unchecked")
             Map<String, Object> radarResponse = restTemplate.getForObject(radarUrl, Map.class);
@@ -78,7 +77,7 @@ public class SimulationService {
                 List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
                 
                 if (movements != null && !movements.isEmpty()) {
-                    // Count vehicles by line - ONLY include those that actually appear in radar data
+                    // Count vehicles by line - only include buses that appear in radar data.
                     Map<String, Long> lineCounts = movements.stream()
                         .filter(movement -> movement.get("line") != null)
                         .map(movement -> {
@@ -89,10 +88,7 @@ public class SimulationService {
                             String lineName = (String) line.get("name");
                             String lineMode = (String) line.get("mode");
                             
-                            // Only include lines that actually appear in radar data (bus and U-Bahn)
-                            // Exclude S-Bahn lines as they don't appear consistently in radar
-                            if (lineName != null && lineMode != null && 
-                                ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U")))) {
+                            if (lineName != null && "bus".equals(lineMode)) {
                                 return lineName;
                             }
                             return null;
@@ -104,20 +100,11 @@ public class SimulationService {
                         ));
                     
                     if (!lineCounts.isEmpty()) {
-                        String mostActiveLine = lineCounts.entrySet().stream()
-                            .max(Map.Entry.comparingByValue())
-                            .map(Map.Entry::getKey)
-                            .orElse("255");
-                        
-                        long vehicleCount = lineCounts.get(mostActiveLine);
-                        
-                        System.out.println("=== MOST ACTIVE LINE IN RADAR DATA ===");
-                        System.out.println(mostActiveLine + ": " + vehicleCount + " vehicles");
-                        System.out.println("=====================================");
-                        
-                        if (!emitters.containsKey(mostActiveLine)) {
-                            emitters.put(mostActiveLine, new CopyOnWriteArrayList<>());
-                        }
+                        lineCounts.keySet().forEach(lineId ->
+                            emitters.computeIfAbsent(lineId, key -> new CopyOnWriteArrayList<>())
+                        );
+
+                        System.out.println("Active bus lines available: " + lineCounts.size());
                     }
                 }
             }
@@ -132,7 +119,7 @@ public class SimulationService {
             if (subs == null || subs.isEmpty()) return;
             
             try {
-                String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=50&frames=1";
+                String radarUrl = "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=256&frames=1";
                 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> radarResponse = restTemplate.getForObject(radarUrl, Map.class);
@@ -152,9 +139,7 @@ public class SimulationService {
                                 if (line != null) {
                                     String lineName = (String) line.get("name");
                                     String lineMode = (String) line.get("mode");
-                                    // Only process bus lines and U-Bahn trains, check exact match
-                                    return ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U"))) 
-                                           && routeId.equals(lineName);
+                                    return "bus".equals(lineMode) && routeId.equals(lineName);
                                 }
                                 return false;
                             }).count();
@@ -163,6 +148,7 @@ public class SimulationService {
                         
                         if (matchingVehicles > 0) {
                             // Process real vehicles for this route
+                            AtomicInteger vehicleSequence = new AtomicInteger(1);
                             movements.stream()
                                 .filter(movement -> {
                                     @SuppressWarnings("unchecked")
@@ -170,8 +156,7 @@ public class SimulationService {
                                     if (line != null) {
                                         String lineName = (String) line.get("name");
                                         String lineMode = (String) line.get("mode");
-                                        return ("bus".equals(lineMode) || ("train".equals(lineMode) && lineName.startsWith("U"))) 
-                                               && routeId.equals(lineName);
+                                        return "bus".equals(lineMode) && routeId.equals(lineName);
                                     }
                                     return false;
                                 })
@@ -188,24 +173,19 @@ public class SimulationService {
                                                 Double lat = ((Number) latObj).doubleValue();
                                                 Double lon = ((Number) lonObj).doubleValue();
                                                 
-                                                String originalTripId = (String) movement.get("tripId");
-                                                String direction = (String) movement.get("direction");
+                                                String originalTripId = movement.get("tripId") instanceof String
+                                                    ? (String) movement.get("tripId")
+                                                    : null;
+                                                String direction = movement.get("direction") instanceof String
+                                                    ? (String) movement.get("direction")
+                                                    : null;
                                                 
                                                 String destination = direction;
                                                 if (destination == null || destination.trim().isEmpty()) {
                                                     destination = "Unknown destination";
                                                 }
                                                 
-                                                String vehicleId;
-                                                if (originalTripId != null) {
-                                                    vehicleId = tripIdToCleanId.get(originalTripId);
-                                                    if (vehicleId == null) {
-                                                        vehicleId = "Bus " + routeId + "-" + vehicleCounter++;
-                                                        tripIdToCleanId.put(originalTripId, vehicleId);
-                                                    }
-                                                } else {
-                                                    vehicleId = "Bus " + routeId + "-" + vehicleCounter++;
-                                                }
+                                                String vehicleId = VehicleIdFormatter.format(routeId, originalTripId, vehicleSequence.getAndIncrement());
                                                 
                                                 VehicleLocation loc = new VehicleLocation(
                                                     routeId, vehicleId, lat, lon, Instant.now(), destination
@@ -244,7 +224,8 @@ public class SimulationService {
                 System.err.println("Error fetching radar data: " + e.getMessage());
                 
                 // If it's a 503 or temporary error, don't fall back to simulation immediately
-                if (e.getMessage().contains("503") || e.getMessage().contains("Service Unavailable")) {
+                String message = e.getMessage();
+                if (message != null && (message.contains("503") || message.contains("Service Unavailable"))) {
                     System.out.println("BVG API temporarily unavailable (503), retrying in next cycle...");
                     return; // Skip this cycle, try again in 3 seconds
                 }
@@ -281,7 +262,8 @@ public class SimulationService {
                         waypoint.lon() + lonOffset, 
                         Instant.now(),
                         "Simulated destination"
-                    );                    System.out.println("Simulating vehicle: " + loc.vehicleId() + " at " + loc.lat() + "," + loc.lon());
+                    );
+                    System.out.println("Simulating vehicle: " + loc.vehicleId() + " at " + loc.lat() + "," + loc.lon());
                     
                     subs.forEach(emitter -> {
                         try {
