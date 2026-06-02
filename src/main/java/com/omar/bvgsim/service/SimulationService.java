@@ -104,122 +104,112 @@ public class SimulationService {
         }
     }
 
-    @Scheduled(fixedRate = 3000)
+    @Scheduled(fixedRate = 1000)
     public void fetchRealDataAndBroadcast() {
+        boolean hasSubscribers = emitters.values().stream()
+            .anyMatch(subs -> subs != null && !subs.isEmpty());
+        if (!hasSubscribers) {
+            return;
+        }
+
+        List<VehicleLocation> locations;
+        try {
+            locations = fetchLiveVehicleLocations();
+        } catch (RestClientException e) {
+            System.err.println("Error fetching radar data: " + e.getMessage());
+            return;
+        }
+
         emitters.forEach((routeId, subs) -> {
-            if (subs == null || subs.isEmpty()) return;
-            
-            try {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> radarResponse = restTemplate.getForObject(RADAR_URL, Map.class);
-                
-                if (radarResponse != null && radarResponse.containsKey("movements")) {
-                    @SuppressWarnings("unchecked")
-                    List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
-                    
-                    if (movements != null && !movements.isEmpty()) {
-                        boolean streamingAllRoutes = ALL_ROUTES_ID.equals(routeId);
-                        String routeLabel = streamingAllRoutes ? "all active bus lines" : "route: " + routeId;
-                        System.out.println("Processing vehicles for " + routeLabel);
-                        
-                        // Count matching vehicles for this specific route
-                        long matchingVehicles = movements.stream()
-                            .filter(movement -> shouldStreamMovement(routeId, movement))
-                            .count();
-                        
-                        System.out.println("Found " + matchingVehicles + " real vehicles for " + routeLabel);
-                        
-                        if (matchingVehicles > 0) {
-                            // Process real vehicles for this route
-                            Map<String, AtomicInteger> vehicleSequences = new HashMap<>();
-                            movements.stream()
-                                .filter(movement -> shouldStreamMovement(routeId, movement))
-                                .forEach(movement -> {
-                                    try {
-                                        @SuppressWarnings("unchecked")
-                                        Map<String, Object> location = (Map<String, Object>) movement.get("location");
-                                        String lineId = extractBusLineName(movement);
-                                        
-                                        if (location != null && lineId != null) {
-                                            Object latObj = location.get("latitude");
-                                            Object lonObj = location.get("longitude");
-                                            
-                                            if (latObj instanceof Number && lonObj instanceof Number) {
-                                                Double lat = ((Number) latObj).doubleValue();
-                                                Double lon = ((Number) lonObj).doubleValue();
-                                                
-                                                String originalTripId = movement.get("tripId") instanceof String
-                                                    ? (String) movement.get("tripId")
-                                                    : null;
-                                                String direction = movement.get("direction") instanceof String
-                                                    ? (String) movement.get("direction")
-                                                    : null;
-                                                
-                                                String destination = direction;
-                                                if (destination == null || destination.trim().isEmpty()) {
-                                                    destination = "Unknown destination";
-                                                }
-                                                
-                                                int sequenceNumber = vehicleSequences
-                                                    .computeIfAbsent(lineId, key -> new AtomicInteger(1))
-                                                    .getAndIncrement();
-                                                String vehicleId = VehicleIdFormatter.format(lineId, originalTripId, sequenceNumber);
-                                                
-                                                VehicleLocation loc = new VehicleLocation(
-                                                    lineId, vehicleId, lat, lon, Instant.now(), destination
-                                                );
-                                                
-                                                System.out.println("Broadcasting real vehicle: " + vehicleId + " at " + lat + "," + lon + " to " + destination);
-                                                
-                                                subs.forEach(emitter -> {
-                                                    try {
-                                                        emitter.send(loc);
-                                                    } catch (Exception e) {
-                                                        System.err.println("Failed to send to emitter: " + e.getMessage());
-                                                        subs.remove(emitter);
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    } catch (Exception e) {
-                                        System.err.println("Error processing movement data: " + e.getMessage());
-                                    }
-                                });
-                        } else {
-                            // No real vehicles found for this route, use simulation
-                            System.out.println("No real vehicles found for route " + routeId + ", using simulation");
-                            if (!streamingAllRoutes) {
-                                simulateVehiclesForRoute(routeId, subs);
-                            }
-                        }
-                    } else {
-                        // No movements data, use simulation
-                        if (!ALL_ROUTES_ID.equals(routeId)) {
-                            simulateVehiclesForRoute(routeId, subs);
-                        }
-                    }
-                } else {
-                    // Invalid response, use simulation
-                    if (!ALL_ROUTES_ID.equals(routeId)) {
-                        simulateVehiclesForRoute(routeId, subs);
-                    }
+            if (subs == null || subs.isEmpty()) {
+                return;
+            }
+
+            List<VehicleLocation> matchingLocations = locations.stream()
+                .filter(location -> ALL_ROUTES_ID.equals(routeId) || routeId.equals(location.routeId()))
+                .toList();
+
+            matchingLocations.forEach(location -> subs.forEach(emitter -> {
+                try {
+                    emitter.send(location);
+                } catch (Exception e) {
+                    System.err.println("Failed to send to emitter: " + e.getMessage());
+                    subs.remove(emitter);
                 }
-            } catch (RestClientException e) {
-                System.err.println("Error fetching radar data: " + e.getMessage());
-                
-                // If it's a 503 or temporary error, don't fall back to simulation immediately
-                String message = e.getMessage();
-                if (message != null && (message.contains("503") || message.contains("Service Unavailable"))) {
-                    System.out.println("BVG API temporarily unavailable (503), retrying in next cycle...");
-                    return; // Skip this cycle, try again in 3 seconds
-                }
-                
-                // For other errors, fall back to simulation
-                if (!ALL_ROUTES_ID.equals(routeId)) {
-                    simulateVehiclesForRoute(routeId, subs);
-                }
+            }));
+
+            if (matchingLocations.isEmpty() && !ALL_ROUTES_ID.equals(routeId)) {
+                simulateVehiclesForRoute(routeId, subs);
             }
         });
+    }
+
+    private List<VehicleLocation> fetchLiveVehicleLocations() {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> radarResponse = restTemplate.getForObject(RADAR_URL, Map.class);
+
+        if (radarResponse == null || !radarResponse.containsKey("movements")) {
+            return List.of();
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
+        if (movements == null || movements.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, AtomicInteger> vehicleSequences = new HashMap<>();
+        return movements.stream()
+            .map(movement -> toVehicleLocation(movement, vehicleSequences))
+            .filter(location -> location != null)
+            .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    private VehicleLocation toVehicleLocation(
+        Map<String, Object> movement,
+        Map<String, AtomicInteger> vehicleSequences
+    ) {
+        Object locationValue = movement.get("location");
+        if (!(locationValue instanceof Map)) {
+            return null;
+        }
+
+        String lineId = extractBusLineName(movement);
+        if (lineId == null) {
+            return null;
+        }
+
+        Map<String, Object> location = (Map<String, Object>) locationValue;
+        Object latObj = location.get("latitude");
+        Object lonObj = location.get("longitude");
+        if (!(latObj instanceof Number) || !(lonObj instanceof Number)) {
+            return null;
+        }
+
+        String originalTripId = movement.get("tripId") instanceof String
+            ? (String) movement.get("tripId")
+            : null;
+        String destination = movement.get("direction") instanceof String
+            ? (String) movement.get("direction")
+            : "Unknown destination";
+        if (destination == null || destination.trim().isEmpty()) {
+            destination = "Unknown destination";
+        }
+
+        int sequenceNumber = vehicleSequences
+            .computeIfAbsent(lineId, key -> new AtomicInteger(1))
+            .getAndIncrement();
+        String vehicleId = VehicleIdFormatter.format(lineId, originalTripId, sequenceNumber);
+
+        return new VehicleLocation(
+            lineId,
+            vehicleId,
+            ((Number) latObj).doubleValue(),
+            ((Number) lonObj).doubleValue(),
+            Instant.now(),
+            destination
+        );
     }
 
     @SuppressWarnings("unchecked")
@@ -240,11 +230,6 @@ public class SimulationService {
         return null;
     }
 
-    private boolean shouldStreamMovement(String routeId, Map<String, Object> movement) {
-        String lineName = extractBusLineName(movement);
-        return lineName != null && (ALL_ROUTES_ID.equals(routeId) || routeId.equals(lineName));
-    }
-    
     private void simulateVehiclesForRoute(String routeId, List<SseEmitter> subs) {
         try {
             // Find the route from loader

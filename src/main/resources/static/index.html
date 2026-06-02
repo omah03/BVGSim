@@ -17,7 +17,7 @@
       position:absolute;
       top:12px;
       left:12px;
-      width:min(340px, calc(100vw - 24px));
+      width:min(360px, calc(100vw - 24px));
       background:rgba(255,255,255,0.96);
       padding:12px;
       border-radius:8px;
@@ -30,6 +30,12 @@
       font-weight:700;
       font-size:16px;
       color:#1f2933;
+      margin-bottom:8px;
+    }
+    .control-subtitle {
+      font-size:12px;
+      line-height:1.35;
+      color:#52606d;
       margin-bottom:10px;
     }
     .control-group {
@@ -43,6 +49,12 @@
       color:#3d4b5c;
       font-weight:700;
     }
+    .line-toolbar {
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    input[type="search"],
     select {
       width:100%;
       min-height:36px;
@@ -54,6 +66,61 @@
       font-size:14px;
       box-sizing:border-box;
     }
+    .clear-button {
+      min-height:36px;
+      padding:0 10px;
+      border:1px solid #b8c2cc;
+      background:#f8fafc;
+      color:#334155;
+      border-radius:6px;
+      cursor:pointer;
+      font-weight:700;
+      flex-shrink:0;
+    }
+    .line-list {
+      max-height:220px;
+      overflow:auto;
+      border:1px solid #d9e2ec;
+      border-radius:6px;
+      background:#fff;
+    }
+    .line-option {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 10px;
+      border-left:4px solid #64748b;
+      border-bottom:1px solid #edf2f7;
+      cursor:pointer;
+    }
+    .line-option:last-child {
+      border-bottom:0;
+    }
+    .line-option input {
+      flex-shrink:0;
+    }
+    .line-option-text {
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      width:100%;
+      min-width:0;
+      align-items:baseline;
+    }
+    .line-option-text strong {
+      color:#102a43;
+      font-size:14px;
+    }
+    .line-option-text small {
+      color:#64748b;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    .empty-state {
+      color:#64748b;
+      font-size:13px;
+      padding:10px;
+    }
     select:disabled {
       color:#6b7280;
       background:#f4f6f8;
@@ -63,6 +130,9 @@
       font-size:12px;
       line-height:1.35;
       color:#52606d;
+    }
+    #status.error {
+      color:#c2410c;
     }
     #legend {
       position:absolute; bottom:20px; right:20px;
@@ -92,6 +162,47 @@
       flex-shrink: 0;
     }
     #map {height:100%;}
+    .vehicle-marker {
+      background:transparent;
+      border:0;
+    }
+    .vehicle-dot {
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:50%;
+      background:var(--line-color);
+      border:2px solid #fff;
+      box-shadow:0 2px 6px rgba(15,23,42,0.35);
+      color:#fff;
+      font-size:10px;
+      font-weight:800;
+      line-height:1;
+      box-sizing:border-box;
+    }
+    .vehicle-dot.tracked {
+      border:3px solid #111827;
+      box-shadow:0 0 0 4px rgba(17,24,39,0.18), 0 3px 9px rgba(15,23,42,0.4);
+    }
+    #location-control {
+      position:absolute;
+      top:12px;
+      right:12px;
+      z-index:1000;
+      min-height:36px;
+      padding:0 12px;
+      border-radius:6px;
+      border:1px solid rgba(0,0,0,0.2);
+      background:#fff;
+      color:#102a43;
+      box-shadow:0 1px 5px rgba(0,0,0,0.3);
+      cursor:pointer;
+      font-weight:700;
+    }
+    #location-control.active {
+      background:#2563eb;
+      color:#fff;
+    }
     @media (max-width: 640px) {
       #controls {
         top:8px;
@@ -103,28 +214,38 @@
         bottom:12px;
         max-width:calc(100vw - 40px);
       }
+      #location-control {
+        top:auto;
+        right:8px;
+        bottom:12px;
+      }
     }
   </style>
 </head>
 <body>
   <div id="controls" aria-label="Bus tracking controls">
     <div class="control-title">BVG Bus Tracker</div>
+    <div class="control-subtitle">Pick one or more lines. Other buses stay hidden.</div>
     <div class="control-group">
-      <label for="routeSelect">Line</label>
-      <select id="routeSelect">
-        <option value="">Loading active lines...</option>
-      </select>
+      <label for="lineSearch">Lines</label>
+      <div class="line-toolbar">
+        <input id="lineSearch" type="search" placeholder="Search line..." autocomplete="off" />
+        <button id="clearLines" class="clear-button" type="button">Clear</button>
+      </div>
+      <div id="lineList" class="line-list" aria-label="Selectable bus lines">
+        <div class="empty-state">Loading active lines...</div>
+      </div>
     </div>
     <div class="control-group" id="vehicleSelectContainer">
       <label for="vehicleSelect">Bus</label>
       <select id="vehicleSelect" disabled>
-        <option value="">Loading all active buses...</option>
+        <option value="">Select lines first</option>
       </select>
     </div>
-    <div id="status">Loading all active buses...</div>
+    <div id="status">Loading active lines...</div>
   </div>
   <div id="legend">
-    <h4>Bus Destinations</h4>
+    <h4>Selected Lines</h4>
     <div id="legend-content">
       <div class="legend-item">
         <div class="legend-color" style="background-color: #808080;"></div>

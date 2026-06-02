@@ -1,7 +1,7 @@
 # BVG Real-Time Bus Tracker
 
 A comprehensive real-time bus tracking application for Berlin's BVG public transport system, featuring interactive maps, geolocation tracking, and color-coded destinations.
-Shows active buses across Berlin by default, with filters for a line or an individual bus.
+Lets riders choose one or more active BVG bus lines, hide everything else, and track a specific bus from the selected lines.
  **[Live Application](https://bvgsim-production.up.railway.app)** |  **[Demo Version](https://omah03.github.io/BVGSim/)** |  **[Source Code](https://github.com/omah03/BVGSim)**
 
 ##  Application Screenshots
@@ -22,13 +22,14 @@ Shows active buses across Berlin by default, with filters for a line or an indiv
 
 - ** Real-time tracking** of BVG buses and trains using the official BVG API v6
 - ** Interactive map** with Leaflet.js showing live vehicle positions across Berlin
-- ** Color-coded destinations** for easy route identification and direction tracking
+- ** Color-coded selected lines** with clear vehicle labels and destination details
 - ** Geolocation support** to find and track nearest vehicles with distance calculations
-- ** Individual vehicle tracking** with detailed route information and following mode
-- ** Server-sent events** for real-time updates every 3 seconds
+- ** Individual vehicle tracking** from the selected line set with detailed destination information
+- ** Server-sent events** for real-time updates every second
 - ** Responsive design** optimized for desktop and mobile devices
 - ** Live route visualization** with actual BVG line data and stop information
-- ** Dynamic line selection** based on vehicle activity and availability
+- ** Multi-line selection** based on vehicle activity and availability
+- ** Rate-limit conscious live feed** using one shared stream for line filtering and bus tracking
 
 ##  Tech Stack
 
@@ -90,8 +91,8 @@ The application is deployed and running live on Railway:
 
 ##  How to Use
 
-1. ** View all active buses** across available BVG bus lines
-2. ** Filter by bus line** or choose a specific vehicle to track
+1. ** Select one or more bus lines** from the line picker
+2. ** Choose a specific vehicle** from the selected lines, or view all selected-line buses
 3. ** Enable location tracking** to find nearest buses and calculate distances
 4. ** Click vehicle markers** for detailed information including destination and position
 5. ** Use the legend** to understand color coding for different destinations
