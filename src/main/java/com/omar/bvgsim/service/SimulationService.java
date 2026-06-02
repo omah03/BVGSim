@@ -12,8 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import com.omar.bvgsim.model.VehicleLocation;
@@ -24,13 +22,13 @@ import jakarta.annotation.PostConstruct;
 @EnableScheduling
 public class SimulationService {
     private static final String ALL_ROUTES_ID = "all";
-    private static final String RADAR_URL =
-        "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=256&frames=1";
 
     @Autowired
     private RouteLoader loader;
-    
-    private final RestTemplate restTemplate = new RestTemplate();
+
+    @Autowired
+    private BvgRadarClient radarClient;
+
     private final Map<String, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
 
     @PostConstruct
@@ -72,31 +70,25 @@ public class SimulationService {
     public void updateAvailableLines() {
         try {
             System.out.println("Checking for active bus lines from BVG radar API...");
-            
-            @SuppressWarnings("unchecked")
-            Map<String, Object> radarResponse = restTemplate.getForObject(RADAR_URL, Map.class);
-            
-            if (radarResponse != null && radarResponse.containsKey("movements")) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
-                
-                if (movements != null && !movements.isEmpty()) {
-                    // Count vehicles by line - only include buses that appear in radar data.
-                    Map<String, Long> lineCounts = movements.stream()
-                        .map(this::extractBusLineName)
-                        .filter(lineName -> lineName != null) // Remove all null values
-                        .collect(java.util.stream.Collectors.groupingBy(
-                            lineName -> lineName,
-                            java.util.stream.Collectors.counting()
-                        ));
-                    
-                    if (!lineCounts.isEmpty()) {
-                        lineCounts.keySet().forEach(lineId ->
-                            emitters.computeIfAbsent(lineId, key -> new CopyOnWriteArrayList<>())
-                        );
 
-                        System.out.println("Active bus lines available: " + lineCounts.size());
-                    }
+            List<Map<String, Object>> movements = radarClient.fetchBerlinMovements();
+
+            if (movements != null && !movements.isEmpty()) {
+                // Count vehicles by line - only include buses that appear in radar data.
+                Map<String, Long> lineCounts = movements.stream()
+                    .map(this::extractBusLineName)
+                    .filter(lineName -> lineName != null) // Remove all null values
+                    .collect(java.util.stream.Collectors.groupingBy(
+                        lineName -> lineName,
+                        java.util.stream.Collectors.counting()
+                    ));
+
+                if (!lineCounts.isEmpty()) {
+                    lineCounts.keySet().forEach(lineId ->
+                        emitters.computeIfAbsent(lineId, key -> new CopyOnWriteArrayList<>())
+                    );
+
+                    System.out.println("Active bus lines available: " + lineCounts.size());
                 }
             }
         } catch (Exception e) {
@@ -113,12 +105,7 @@ public class SimulationService {
         }
 
         List<VehicleLocation> locations;
-        try {
-            locations = fetchLiveVehicleLocations();
-        } catch (RestClientException e) {
-            System.err.println("Error fetching radar data: " + e.getMessage());
-            return;
-        }
+        locations = fetchLiveVehicleLocations();
 
         emitters.forEach((routeId, subs) -> {
             if (subs == null || subs.isEmpty()) {
@@ -145,15 +132,7 @@ public class SimulationService {
     }
 
     private List<VehicleLocation> fetchLiveVehicleLocations() {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> radarResponse = restTemplate.getForObject(RADAR_URL, Map.class);
-
-        if (radarResponse == null || !radarResponse.containsKey("movements")) {
-            return List.of();
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
+        List<Map<String, Object>> movements = radarClient.fetchBerlinMovements();
         if (movements == null || movements.isEmpty()) {
             return List.of();
         }

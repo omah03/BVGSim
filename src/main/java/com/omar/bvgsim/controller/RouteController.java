@@ -1,7 +1,6 @@
 package com.omar.bvgsim.controller;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -15,22 +14,20 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestTemplate;
 
 import com.omar.bvgsim.model.Route;
+import com.omar.bvgsim.service.BvgRadarClient;
 import com.omar.bvgsim.service.RouteLoader;
 import com.omar.bvgsim.service.VehicleIdFormatter;
 
 @RestController
 @RequestMapping("/api/routes")
 public class RouteController {
-    private static final String RADAR_URL =
-        "https://v6.bvg.transport.rest/radar?north=52.6755&west=13.0883&south=52.3382&east=13.7611&results=256&frames=1";
-
     @Autowired
     private RouteLoader loader;
-    
-    private final RestTemplate restTemplate = new RestTemplate();
+
+    @Autowired
+    private BvgRadarClient radarClient;
 
     @GetMapping
     public List<Route> list() {
@@ -39,7 +36,7 @@ public class RouteController {
     
     @GetMapping({"/lines", "/top-lines"})
     public List<Map<String, Object>> getLines() {
-        List<Map<String, Object>> movements = fetchRadarMovements();
+        List<Map<String, Object>> movements = radarClient.fetchBerlinMovements();
 
         Map<String, Long> lineCounts = movements.stream()
             .map(this::extractBusLineName)
@@ -69,7 +66,7 @@ public class RouteController {
     public List<Map<String, Object>> getVehiclesForLine(@PathVariable String lineId) {
         AtomicInteger vehicleCounter = new AtomicInteger(1);
 
-        return fetchRadarMovements().stream()
+        return radarClient.fetchBerlinMovements().stream()
             .filter(movement -> lineId.equals(extractBusLineName(movement)))
             .map(movement -> toVehicleInfo(lineId, movement, vehicleCounter.getAndIncrement()))
             .filter(Objects::nonNull)
@@ -80,7 +77,7 @@ public class RouteController {
     public List<Map<String, Object>> getAllVehicles() {
         Map<String, AtomicInteger> vehicleCounters = new HashMap<>();
 
-        return fetchRadarMovements().stream()
+        return radarClient.fetchBerlinMovements().stream()
             .map(movement -> {
                 String lineId = extractBusLineName(movement);
                 if (lineId == null) {
@@ -97,23 +94,6 @@ public class RouteController {
                 .comparing((Map<String, Object> vehicle) -> vehicle.get("lineId").toString(), this::compareLineIds)
                 .thenComparing(vehicle -> vehicle.get("id").toString()))
             .collect(Collectors.toList());
-    }
-
-    private List<Map<String, Object>> fetchRadarMovements() {
-        try {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> radarResponse = restTemplate.getForObject(RADAR_URL, Map.class);
-
-            if (radarResponse != null && radarResponse.containsKey("movements")) {
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
-                return movements != null ? movements : Collections.emptyList();
-            }
-        } catch (Exception e) {
-            System.err.println("Error fetching BVG radar data: " + e.getMessage());
-        }
-
-        return Collections.emptyList();
     }
 
     private String extractBusLineName(Map<String, Object> movement) {

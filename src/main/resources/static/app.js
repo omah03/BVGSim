@@ -28,6 +28,7 @@ let markers = new Map();
 let trackedVehicleId = '';
 let lastLiveUpdate = 0;
 let hasFitSelection = false;
+const selectedLineLoads = new Map();
 
 const els = {
   lineSearch: document.getElementById('lineSearch'),
@@ -107,18 +108,17 @@ function startLiveStream() {
     }
 
     lastLiveUpdate = Date.now();
-    vehicles.set(vehicle.id, vehicle);
-    ensureLineExists(vehicle.routeId);
+    upsertVehicle(vehicle);
     renderVisibleVehicles();
     updateStatusForSelection();
   };
 }
 
 function normalizeVehicle(raw) {
-  const lat = Number(raw.lat);
-  const lon = Number(raw.lon);
-  const routeId = String(raw.routeId || '');
-  const id = String(raw.vehicleId || '');
+  const lat = Number(raw.lat ?? raw.latitude);
+  const lon = Number(raw.lon ?? raw.longitude);
+  const routeId = String(raw.routeId ?? raw.lineId ?? '');
+  const id = String(raw.vehicleId ?? raw.id ?? '');
 
   if (!routeId || !id || !Number.isFinite(lat) || !Number.isFinite(lon)) {
     return null;
@@ -133,6 +133,11 @@ function normalizeVehicle(raw) {
     timestamp: raw.timestamp,
     lastSeen: Date.now()
   };
+}
+
+function upsertVehicle(vehicle) {
+  vehicles.set(vehicle.id, vehicle);
+  ensureLineExists(vehicle.routeId);
 }
 
 function ensureLineExists(lineId) {
@@ -178,6 +183,7 @@ function renderLineList() {
     checkbox.addEventListener('change', () => {
       if (checkbox.checked) {
         selectedLines.add(line.id);
+        loadVehiclesForLine(line.id);
       } else {
         selectedLines.delete(line.id);
         if (trackedVehicleId && vehicles.get(trackedVehicleId)?.routeId === line.id) {
@@ -199,6 +205,43 @@ function renderLineList() {
     row.appendChild(text);
     els.lineList.appendChild(row);
   });
+}
+
+async function loadVehiclesForLine(lineId) {
+  if (selectedLineLoads.has(lineId)) {
+    return selectedLineLoads.get(lineId);
+  }
+
+  updateStatus(`Loading all live buses for line ${lineId}...`);
+
+  const request = fetchJson(`/api/routes/vehicles/${encodeURIComponent(lineId)}`)
+    .then(lineVehicles => {
+      lineVehicles
+        .map(normalizeVehicle)
+        .filter(Boolean)
+        .forEach(upsertVehicle);
+
+      const activeLine = activeLines.find(line => line.id === lineId);
+      if (activeLine) {
+        activeLine.vehicleCount = lineVehicles.length;
+      }
+
+      if (selectedLines.has(lineId)) {
+        renderEverything();
+      }
+    })
+    .catch(error => {
+      console.error(`Could not load vehicles for line ${lineId}:`, error);
+      if (selectedLines.has(lineId)) {
+        updateStatus(`Could not load all buses for line ${lineId}. Waiting for live stream...`, true);
+      }
+    })
+    .finally(() => {
+      selectedLineLoads.delete(lineId);
+    });
+
+  selectedLineLoads.set(lineId, request);
+  return request;
 }
 
 function renderEverything() {
