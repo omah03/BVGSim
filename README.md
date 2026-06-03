@@ -21,10 +21,11 @@ Lets riders choose one or more active BVG bus lines, hide everything else, and t
 ## 🚌 Key Features
 
 - ** Real-time tracking** of BVG buses and trains using the official BVG API v6
-- ** Interactive map** with Leaflet.js showing live vehicle positions across Berlin
+- ** Interactive map** with Google Maps showing live vehicle positions across Berlin
 - ** Color-coded selected lines** with clear vehicle labels and destination details
 - ** Geolocation support** to find and track nearest vehicles with distance calculations
 - ** Individual vehicle tracking** from the selected line set with detailed destination information
+- ** Remaining stop and trip-path highlights** for the focused bus, bounded by your nearest stop when geolocation is active
 - ** Server-sent events** for real-time updates every second
 - ** Responsive design** optimized for desktop and mobile devices
 - ** Live route visualization** with actual BVG line data and stop information
@@ -42,10 +43,10 @@ Lets riders choose one or more active BVG bus lines, hide everything else, and t
 
 ### Frontend
 - **HTML5** with modern CSS3 and responsive design
-- **JavaScript ES6+** with Leaflet.js for interactive mapping
+- **JavaScript ES6+** with Google Maps for interactive mapping
 - **Geolocation API** for user positioning and distance calculations
 - **EventSource API** for real-time updates via Server-Sent Events
-- **Leaflet.js** for interactive maps and custom markers
+- **Google Maps JavaScript API** for interactive maps and custom markers
 
 ##  Quick Start
 
@@ -104,7 +105,7 @@ This application integrates with multiple BVG and Berlin transport APIs:
 
 - **BVG Radar API**: Real-time vehicle positions and movement data
 - **BVG Transport API v6**: Route information, schedules, and stop data
-- **OpenStreetMap**: Base map tiles and geographic data
+- **Google Maps JavaScript API**: Base map, markers, and geographic display
 - **Geolocation API**: User positioning and distance calculations
 
 ##  Architecture
@@ -138,12 +139,14 @@ src/
 ### Environment Variables
 - `SERVER_PORT`: Application port (default: 8080)
 - `BVG_API_BASE_URL`: BVG API base URL (default: https://v6.bvg.transport.rest)
+- `GOOGLE_MAPS_API_KEY`: Browser API key for the Google Maps JavaScript API. On Railway, set this in the service's Variables tab.
 
 ### Application Properties
 ```properties
 server.port=8080
 spring.web.cors.allowed-origins=*
 spring.web.cors.allowed-methods=GET,POST,PUT,DELETE,OPTIONS
+google.maps.api-key=${GOOGLE_MAPS_API_KEY:}
 ```
 
 ##  Contributing
@@ -168,7 +171,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 
 - **Backend:** Spring Boot REST & Server‑Sent Events (SSE)
-- **Frontend:** Leaflet map with route selection & live markers
+- **Frontend:** Google Maps with route selection & live markers
 - **Data:** Live vehicle positions from https://production.gtfsrt.vbb.de/data
 
 ## Run

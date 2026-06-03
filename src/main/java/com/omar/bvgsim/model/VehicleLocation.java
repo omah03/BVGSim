@@ -5,6 +5,7 @@ import java.time.Instant;
 public record VehicleLocation(
     String routeId,
     String vehicleId,
+    String tripId,
     double lat,
     double lon,
     Instant timestamp,

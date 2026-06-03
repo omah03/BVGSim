@@ -184,6 +184,7 @@ public class SimulationService {
         return new VehicleLocation(
             lineId,
             vehicleId,
+            originalTripId,
             ((Number) latObj).doubleValue(),
             ((Number) lonObj).doubleValue(),
             Instant.now(),
@@ -231,6 +232,7 @@ public class SimulationService {
                     VehicleLocation loc = new VehicleLocation(
                         routeId, 
                         routeId + "-sim-" + i, 
+                        null,
                         waypoint.lat() + latOffset, 
                         waypoint.lon() + lonOffset, 
                         Instant.now(),

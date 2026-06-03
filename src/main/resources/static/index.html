@@ -4,50 +4,78 @@
   <title>BVGSim Map</title>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
     body,html {
       margin:0;
       padding:0;
       height:100%;
-      font-family: Arial, sans-serif;
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+      color:#17202a;
     }
     #controls {
       position:absolute;
-      top:12px;
-      left:12px;
-      width:min(360px, calc(100vw - 24px));
-      background:rgba(255,255,255,0.96);
-      padding:12px;
-      border-radius:8px;
+      top:16px;
+      left:16px;
+      width:min(330px, calc(100vw - 32px));
+      max-height:calc(100vh - 32px);
+      overflow:hidden;
+      background:rgba(248,250,252,0.82);
+      backdrop-filter:blur(24px) saturate(180%);
+      -webkit-backdrop-filter:blur(24px) saturate(180%);
+      padding:0;
+      border-radius:18px;
       z-index:1000;
-      border:1px solid rgba(0,0,0,0.18);
-      box-shadow:0 2px 12px rgba(0,0,0,0.18);
+      border:1px solid rgba(255,255,255,0.68);
+      box-shadow:0 18px 50px rgba(15,23,42,0.18);
       box-sizing:border-box;
+    }
+    #controls.collapsed {
+      width:auto;
+      max-width:calc(100vw - 32px);
+    }
+    #controls.collapsed .panel-body {
+      display:none;
+    }
+    .panel-header {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:13px 14px 11px;
+      border-bottom:1px solid rgba(148,163,184,0.24);
+    }
+    .panel-body {
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      padding:10px;
+      overflow:auto;
+      max-height:calc(100vh - 94px);
     }
     .control-title {
       font-weight:700;
-      font-size:16px;
-      color:#1f2933;
-      margin-bottom:8px;
-    }
-    .control-subtitle {
-      font-size:12px;
-      line-height:1.35;
-      color:#52606d;
-      margin-bottom:10px;
+      font-size:15px;
+      letter-spacing:0;
+      color:#111827;
     }
     .control-group {
       display:flex;
       flex-direction:column;
-      gap:4px;
-      margin-top:8px;
+      gap:8px;
+      background:rgba(255,255,255,0.62);
+      border:1px solid rgba(226,232,240,0.76);
+      border-radius:14px;
+      padding:10px;
     }
-    .control-group label {
-      font-size:12px;
-      color:#3d4b5c;
+    .section-title {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      color:#475569;
+      font-size:11px;
       font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
     }
     .line-toolbar {
       display:flex;
@@ -58,31 +86,38 @@
     select {
       width:100%;
       min-height:36px;
-      padding:7px 9px;
-      border:1px solid #b8c2cc;
-      border-radius:6px;
-      background:white;
+      padding:7px 10px;
+      border:1px solid rgba(148,163,184,0.5);
+      border-radius:10px;
+      background:rgba(255,255,255,0.9);
       color:#102a43;
       font-size:14px;
       box-sizing:border-box;
     }
+    .icon-button,
     .clear-button {
       min-height:36px;
-      padding:0 10px;
-      border:1px solid #b8c2cc;
-      background:#f8fafc;
+      padding:0 11px;
+      border:1px solid rgba(148,163,184,0.46);
+      background:rgba(255,255,255,0.72);
       color:#334155;
-      border-radius:6px;
+      border-radius:10px;
       cursor:pointer;
       font-weight:700;
       flex-shrink:0;
     }
+    .icon-button {
+      min-width:36px;
+      padding:0;
+      font-size:18px;
+      line-height:1;
+    }
     .line-list {
-      max-height:220px;
+      max-height:190px;
       overflow:auto;
-      border:1px solid #d9e2ec;
-      border-radius:6px;
-      background:#fff;
+      border:1px solid rgba(226,232,240,0.84);
+      border-radius:12px;
+      background:rgba(255,255,255,0.76);
     }
     .line-option {
       display:flex;
@@ -126,22 +161,24 @@
       background:#f4f6f8;
     }
     #status {
-      margin-top:10px;
       font-size:12px;
       line-height:1.35;
       color:#52606d;
+      padding:0 2px 2px;
     }
     #status.error {
       color:#c2410c;
     }
     #legend {
       position:absolute; bottom:20px; right:20px;
-      background:rgba(255,255,255,0.9); padding:10px;
-      border-radius:8px; z-index:1000;
-      border: 2px solid #333;
-      font-family: Arial, sans-serif;
-      font-size: 12px;
+      background:rgba(255,255,255,0.8); padding:10px;
+      backdrop-filter:blur(18px) saturate(180%);
+      -webkit-backdrop-filter:blur(18px) saturate(180%);
+      border-radius:14px; z-index:1000;
+      border:1px solid rgba(255,255,255,0.7);
+      font-size:12px;
       max-width: 250px;
+      box-shadow:0 10px 28px rgba(15,23,42,0.14);
     }
     #legend h4 {
       margin: 0 0 8px 0;
@@ -162,28 +199,6 @@
       flex-shrink: 0;
     }
     #map {height:100%;}
-    .vehicle-marker {
-      background:transparent;
-      border:0;
-    }
-    .vehicle-dot {
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:50%;
-      background:var(--line-color);
-      border:2px solid #fff;
-      box-shadow:0 2px 6px rgba(15,23,42,0.35);
-      color:#fff;
-      font-size:10px;
-      font-weight:800;
-      line-height:1;
-      box-sizing:border-box;
-    }
-    .vehicle-dot.tracked {
-      border:3px solid #111827;
-      box-shadow:0 0 0 4px rgba(17,24,39,0.18), 0 3px 9px rgba(15,23,42,0.4);
-    }
     #location-control {
       position:absolute;
       top:12px;
@@ -191,11 +206,13 @@
       z-index:1000;
       min-height:36px;
       padding:0 12px;
-      border-radius:6px;
-      border:1px solid rgba(0,0,0,0.2);
-      background:#fff;
+      border-radius:12px;
+      border:1px solid rgba(148,163,184,0.38);
+      background:rgba(255,255,255,0.84);
       color:#102a43;
-      box-shadow:0 1px 5px rgba(0,0,0,0.3);
+      backdrop-filter:blur(16px);
+      -webkit-backdrop-filter:blur(16px);
+      box-shadow:0 8px 22px rgba(15,23,42,0.16);
       cursor:pointer;
       font-weight:700;
     }
@@ -208,6 +225,7 @@
         top:8px;
         left:8px;
         width:calc(100vw - 16px);
+        max-height:calc(100vh - 16px);
       }
       #legend {
         right:8px;
@@ -224,25 +242,33 @@
 </head>
 <body>
   <div id="controls" aria-label="Bus tracking controls">
-    <div class="control-title">BVG Bus Tracker</div>
-    <div class="control-subtitle">Pick one or more lines. Other buses stay hidden.</div>
-    <div class="control-group">
-      <label for="lineSearch">Lines</label>
-      <div class="line-toolbar">
-        <input id="lineSearch" type="search" placeholder="Search line..." autocomplete="off" />
-        <button id="clearLines" class="clear-button" type="button">Clear</button>
-      </div>
-      <div id="lineList" class="line-list" aria-label="Selectable bus lines">
-        <div class="empty-state">Loading active lines...</div>
-      </div>
+    <div class="panel-header">
+      <div class="control-title">BVG Bus Tracker</div>
+      <button id="togglePanel" class="icon-button" type="button" title="Collapse controls" aria-expanded="true">−</button>
     </div>
-    <div class="control-group" id="vehicleSelectContainer">
-      <label for="vehicleSelect">Bus</label>
-      <select id="vehicleSelect" disabled>
-        <option value="">Select lines first</option>
-      </select>
+    <div class="panel-body">
+      <div class="control-group">
+        <div class="section-title">
+          <label for="lineSearch">Lines</label>
+        </div>
+        <div class="line-toolbar">
+          <input id="lineSearch" type="search" placeholder="Search line..." autocomplete="off" />
+          <button id="clearLines" class="clear-button" type="button">Clear</button>
+        </div>
+        <div id="lineList" class="line-list" aria-label="Selectable bus lines">
+          <div class="empty-state">Loading active lines...</div>
+        </div>
+      </div>
+      <div class="control-group" id="vehicleSelectContainer">
+        <div class="section-title">
+          <label for="vehicleSelect">Bus</label>
+        </div>
+        <select id="vehicleSelect" disabled>
+          <option value="">Select lines first</option>
+        </select>
+      </div>
+      <div id="status">Loading active lines...</div>
     </div>
-    <div id="status">Loading active lines...</div>
   </div>
   <div id="legend">
     <h4>Selected Lines</h4>
@@ -254,7 +280,6 @@
     </div>
   </div>
   <div id="map"></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

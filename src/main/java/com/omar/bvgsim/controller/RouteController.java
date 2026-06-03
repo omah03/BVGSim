@@ -96,6 +96,11 @@ public class RouteController {
             .collect(Collectors.toList());
     }
 
+    @GetMapping("/trips/{tripId}")
+    public Map<String, Object> getTrip(@PathVariable String tripId) {
+        return radarClient.fetchTrip(tripId);
+    }
+
     private String extractBusLineName(Map<String, Object> movement) {
         Map<String, Object> line = extractMap(movement.get("line"));
         if (line == null) {

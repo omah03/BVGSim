@@ -41,6 +41,18 @@ public class BvgRadarClient {
         return Collections.emptyList();
     }
 
+    public Map<String, Object> fetchTrip(String tripId) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> tripResponse = restTemplate.getForObject(buildTripUrl(tripId), Map.class);
+            return tripResponse != null ? tripResponse : Collections.emptyMap();
+        } catch (Exception e) {
+            System.err.println("Error fetching BVG trip data: " + e.getMessage());
+        }
+
+        return Collections.emptyMap();
+    }
+
     private String buildRadarUrl() {
         return UriComponentsBuilder.fromHttpUrl(apiBaseUrl)
             .path("/radar")
@@ -51,6 +63,14 @@ public class BvgRadarClient {
             .queryParam("results", RADAR_RESULT_LIMIT)
             .queryParam("frames", 1)
             .queryParam("polylines", false)
+            .toUriString();
+    }
+
+    private String buildTripUrl(String tripId) {
+        return UriComponentsBuilder.fromHttpUrl(apiBaseUrl)
+            .pathSegment("trips", tripId)
+            .queryParam("stopovers", true)
+            .queryParam("polyline", true)
             .toUriString();
     }
 }
