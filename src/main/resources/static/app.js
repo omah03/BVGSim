@@ -15,6 +15,7 @@ const LINE_COLORS = [
 
 let map = null;
 let infoWindow = null;
+let directionsService = null;
 let eventSource = null;
 let userLocationMarker = null;
 let userLocation = null;
@@ -33,17 +34,26 @@ const tripDetailsCache = new Map();
 const tripDetailsInFlight = new Map();
 let routePolyline = null;
 let routeStopMarkers = [];
+let journeyPolylines = [];
+let journeyStopMarkers = [];
+let plannedLineIds = new Set();
 let highlightedTripId = '';
 let locationControlButton = null;
 
 const els = {
   controls: document.getElementById('controls'),
   togglePanel: document.getElementById('togglePanel'),
+  originInput: document.getElementById('originInput'),
+  destinationInput: document.getElementById('destinationInput'),
+  useLocationForOrigin: document.getElementById('useLocationForOrigin'),
+  planRoute: document.getElementById('planRoute'),
+  clearJourney: document.getElementById('clearJourney'),
   lineSearch: document.getElementById('lineSearch'),
   lineList: document.getElementById('lineList'),
   clearLines: document.getElementById('clearLines'),
   vehicleSelect: document.getElementById('vehicleSelect'),
   status: document.getElementById('status'),
+  journeySummary: document.getElementById('journeySummary'),
   routeInfo: document.getElementById('routeInfo'),
   locationNotice: document.getElementById('locationNotice'),
   legendContent: document.getElementById('legend-content')
@@ -73,6 +83,7 @@ async function initialize() {
     fullscreenControl: true
   });
   infoWindow = new google.maps.InfoWindow();
+  directionsService = new google.maps.DirectionsService();
 
   wireControls();
   addLocationControl();
@@ -121,6 +132,18 @@ function wireControls() {
     els.togglePanel.textContent = collapsed ? '+' : '-';
     els.togglePanel.title = collapsed ? 'Expand controls' : 'Collapse controls';
     els.togglePanel.setAttribute('aria-expanded', String(!collapsed));
+  });
+
+  els.planRoute.addEventListener('click', planJourney);
+  els.clearJourney.addEventListener('click', () => {
+    clearJourneyPlan();
+    updateStatusForSelection();
+  });
+  els.useLocationForOrigin.addEventListener('click', () => {
+    els.originInput.value = 'Current location';
+    if (!userLocation) {
+      startLocationTracking();
+    }
   });
 
   els.lineSearch.addEventListener('input', renderLineList);
@@ -230,18 +253,27 @@ function upsertVehicle(vehicle) {
     heading: vehicle.heading
   });
   vehicles.set(vehicle.id, vehicle);
-  ensureLineExists(vehicle.routeId);
+  ensureLineExistsWithMode(vehicle.routeId, vehicle.mode);
 }
 
 function ensureLineExists(lineId) {
+  ensureLineExistsWithMode(lineId, 'unknown');
+}
+
+function ensureLineExistsWithMode(lineId, mode) {
   if (activeLines.some(line => line.id === lineId)) {
+    const existingLine = activeLines.find(line => line.id === lineId);
+    if (existingLine && (!existingLine.mode || existingLine.mode === 'unknown') && mode) {
+      existingLine.mode = mode;
+      existingLine.name = `${modeDisplayName(mode)} ${lineId}`;
+    }
     return;
   }
 
   activeLines.push({
     id: lineId,
-    name: `Line ${lineId}`,
-    mode: 'unknown',
+    name: `${modeDisplayName(mode)} ${lineId}`,
+    mode: mode || 'unknown',
     vehicleCount: 0
   });
   activeLines.sort((a, b) => compareLineIds(a.id, b.id));
@@ -347,6 +379,225 @@ function renderEverything() {
   updateVehicleSelect();
   updateLegend();
   updateStatusForSelection();
+}
+
+async function planJourney() {
+  const origin = plannerOrigin();
+  const destination = els.destinationInput.value.trim();
+
+  if (!origin) {
+    showLocationNotice('Enter a start point, or use your current location.', true);
+    return;
+  }
+  if (!destination) {
+    updateStatus('Enter a destination to plan a route.', true);
+    return;
+  }
+
+  updateStatus('Planning the best transit route...');
+  clearJourneyPlan({ keepInputs: true, keepSelections: false });
+
+  try {
+    const result = await directionsService.route({
+      origin,
+      destination,
+      travelMode: google.maps.TravelMode.TRANSIT,
+      region: 'de',
+      provideRouteAlternatives: false
+    });
+    renderJourneyPlan(result);
+  } catch (error) {
+    console.error('Could not plan journey:', error);
+    updateStatus('Could not find a transit route for that journey.', true);
+  }
+}
+
+function plannerOrigin() {
+  const originText = els.originInput.value.trim();
+  if (originText && originText.toLowerCase() !== 'current location') {
+    return originText;
+  }
+
+  return userLocation || null;
+}
+
+function renderJourneyPlan(result) {
+  const route = result.routes?.[0];
+  const leg = route?.legs?.[0];
+  if (!route || !leg) {
+    updateStatus('Could not find a route for that journey.', true);
+    return;
+  }
+
+  clearJourneyPlan({ keepInputs: true, keepSelections: false });
+  selectedLines.clear();
+  trackedVehicleId = '';
+  clearRouteOverlay();
+
+  const bounds = new google.maps.LatLngBounds();
+  const transitSteps = [];
+
+  leg.steps.forEach((step, index) => {
+    const path = (step.path || []).map(point => ({ lat: point.lat(), lng: point.lng() }));
+    if (path.length < 2) {
+      return;
+    }
+
+    path.forEach(point => bounds.extend(point));
+
+    if (step.travel_mode === google.maps.TravelMode.TRANSIT && step.transit) {
+      const line = step.transit.line || {};
+      const lineId = line.short_name || line.name || '';
+      const mode = googleTransitMode(line.vehicle?.type);
+      const color = line.color || getLineColor(lineId || String(index));
+
+      journeyPolylines.push(new google.maps.Polyline({
+        map,
+        path,
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: 0.95,
+        strokeWeight: 8,
+        zIndex: 650
+      }));
+
+      addJourneyStopMarker(step.transit.departure_stop, color, `${lineId} departure`);
+      addJourneyStopMarker(step.transit.arrival_stop, color, `${lineId} arrival`);
+
+      if (lineId) {
+        selectedLines.add(lineId);
+        plannedLineIds.add(lineId);
+        ensureLineExistsWithMode(lineId, mode);
+        loadVehiclesForLine(lineId);
+      }
+
+      transitSteps.push({
+        lineId,
+        mode,
+        color,
+        departure: step.transit.departure_stop?.name,
+        arrival: step.transit.arrival_stop?.name,
+        stops: step.transit.num_stops || 0,
+        headsign: step.transit.headsign || ''
+      });
+    } else {
+      journeyPolylines.push(new google.maps.Polyline({
+        map,
+        path,
+        geodesic: true,
+        strokeColor: '#64748b',
+        strokeOpacity: 0.72,
+        strokeWeight: 4,
+        zIndex: 500,
+        icons: [{
+          icon: {
+            path: 'M 0,-1 0,1',
+            strokeOpacity: 1,
+            scale: 3
+          },
+          offset: '0',
+          repeat: '14px'
+        }]
+      }));
+    }
+  });
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, 48);
+  }
+
+  renderJourneySummary(leg, transitSteps);
+  renderEverything();
+  updateStatus('Route planned. Live vehicles are highlighted for the required lines.');
+}
+
+function addJourneyStopMarker(stop, color, label) {
+  const location = stop?.location;
+  if (!location) {
+    return;
+  }
+
+  const marker = new google.maps.Marker({
+    map,
+    position: { lat: location.lat(), lng: location.lng() },
+    title: stop.name || label,
+    zIndex: 850,
+    icon: {
+      path: google.maps.SymbolPath.CIRCLE,
+      fillColor: '#ffffff',
+      fillOpacity: 1,
+      strokeColor: color,
+      strokeWeight: 4,
+      scale: 6
+    }
+  });
+  marker.addListener('click', () => {
+    infoWindow.setContent(`<strong>${escapeHtml(stop.name || label)}</strong>`);
+    infoWindow.open({ anchor: marker, map });
+  });
+  journeyStopMarkers.push(marker);
+}
+
+function renderJourneySummary(leg, transitSteps) {
+  const stepText = transitSteps.length
+    ? transitSteps.map(step => {
+      const stops = step.stops === 1 ? '1 stop' : `${step.stops} stops`;
+      return `${escapeHtml(modeDisplayName(step.mode))} ${escapeHtml(step.lineId)} to ${escapeHtml(step.headsign || step.arrival || 'destination')} (${escapeHtml(stops)})`;
+    }).join('<br>')
+    : 'Walk to destination';
+
+  els.journeySummary.innerHTML = `
+    <strong>${escapeHtml(leg.duration?.text || 'Transit route')} · ${escapeHtml(leg.distance?.text || '')}</strong>
+    ${stepText}<br>
+    Click a live vehicle on a highlighted line to see its real remaining stops.
+  `;
+  els.journeySummary.classList.add('visible');
+}
+
+function clearJourneyPlan(options = {}) {
+  journeyPolylines.forEach(polyline => polyline.setMap(null));
+  journeyStopMarkers.forEach(marker => marker.setMap(null));
+  journeyPolylines = [];
+  journeyStopMarkers = [];
+
+  if (!options.keepSelections) {
+    plannedLineIds.forEach(lineId => selectedLines.delete(lineId));
+    plannedLineIds = new Set();
+  }
+
+  if (!options.keepInputs) {
+    els.originInput.value = '';
+    els.destinationInput.value = '';
+  }
+
+  els.journeySummary.classList.remove('visible');
+  els.journeySummary.innerHTML = '';
+  renderEverything();
+}
+
+function googleTransitMode(type) {
+  switch (String(type || '').toUpperCase()) {
+    case 'BUS':
+    case 'INTERCITY_BUS':
+    case 'TROLLEYBUS':
+      return 'bus';
+    case 'SUBWAY':
+      return 'subway';
+    case 'COMMUTER_TRAIN':
+      return 'suburban';
+    case 'TRAM':
+      return 'tram';
+    case 'FERRY':
+      return 'ferry';
+    case 'RAIL':
+    case 'TRAIN':
+    case 'HEAVY_RAIL':
+      return 'regional';
+    case 'HIGH_SPEED_TRAIN':
+      return 'express';
+    default:
+      return 'unknown';
+  }
 }
 
 function renderVisibleVehicles() {

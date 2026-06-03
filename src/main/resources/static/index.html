@@ -82,7 +82,13 @@
       gap:8px;
       align-items:center;
     }
+    .planner-actions {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:8px;
+    }
     input[type="search"],
+    input[type="text"],
     select {
       width:100%;
       min-height:36px;
@@ -206,6 +212,25 @@
       font-size:13px;
       margin-bottom:3px;
     }
+    #journeySummary {
+      display:none;
+      background:rgba(240,253,244,0.82);
+      border:1px solid rgba(134,239,172,0.58);
+      border-radius:12px;
+      padding:10px;
+      color:#14532d;
+      font-size:12px;
+      line-height:1.4;
+    }
+    #journeySummary.visible {
+      display:block;
+    }
+    #journeySummary strong {
+      display:block;
+      color:#052e16;
+      font-size:13px;
+      margin-bottom:4px;
+    }
     #legend {
       position:absolute; bottom:20px; right:20px;
       background:rgba(255,255,255,0.8); padding:10px;
@@ -286,6 +311,18 @@
     <div class="panel-body">
       <div class="control-group">
         <div class="section-title">
+          <span>Trip</span>
+        </div>
+        <input id="originInput" type="text" placeholder="From" autocomplete="off" />
+        <input id="destinationInput" type="text" placeholder="To" autocomplete="off" />
+        <div class="planner-actions">
+          <button id="useLocationForOrigin" class="clear-button" type="button">Use location</button>
+          <button id="planRoute" class="clear-button" type="button">Go</button>
+        </div>
+        <button id="clearJourney" class="clear-button" type="button">Clear route</button>
+      </div>
+      <div class="control-group">
+        <div class="section-title">
           <label for="lineSearch">Lines</label>
         </div>
         <div class="line-toolbar">
@@ -305,6 +342,7 @@
         </select>
       </div>
       <div id="status">Loading active lines...</div>
+      <div id="journeySummary" aria-live="polite"></div>
       <div id="routeInfo" aria-live="polite"></div>
       <div id="locationNotice" role="status" aria-live="polite"></div>
     </div>

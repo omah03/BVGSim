@@ -26,6 +26,7 @@ Lets riders choose one or more active lines across buses, U-Bahn, S-Bahn, trams,
 - ** Geolocation support** to find and track nearest vehicles with distance calculations
 - ** Individual vehicle tracking** from the selected line set with detailed destination information
 - ** Remaining stop and trip-path highlights** for the focused vehicle, bounded by your nearest stop when geolocation is active
+- ** A-to-B transit planning** with Google transit routing and live vehicle overlays for the required lines
 - ** Server-sent events** for real-time updates every second
 - ** Responsive design** optimized for desktop and mobile devices
 - ** Live route visualization** with actual BVG line data and stop information
@@ -94,10 +95,11 @@ The application is deployed and running live on Railway:
 
 1. ** Select one or more transit lines** from the line picker
 2. ** Choose a specific vehicle** from the selected lines, or view all selected-line vehicles
-3. ** Enable location tracking** to find nearest vehicles and calculate distances
-4. ** Click vehicle markers** for detailed information including destination and position
-5. ** Use the legend** to understand color coding for different destinations
-6. ** Works seamlessly** on both desktop and mobile devices
+3. ** Plan a trip** by entering a start and destination, then follow the highlighted route and required live lines
+4. ** Enable location tracking** to find nearest vehicles and calculate distances
+5. ** Click vehicle markers** for detailed information including destination and position
+6. ** Use the legend** to understand color coding for different destinations
+7. ** Works seamlessly** on both desktop and mobile devices
 
 ##  API Integration
 
