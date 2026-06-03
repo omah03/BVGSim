@@ -30,6 +30,7 @@ let hasFitSelection = false;
 const selectedLineLoads = new Map();
 const previousVehiclePositions = new Map();
 const tripDetailsCache = new Map();
+const tripDetailsInFlight = new Map();
 let routePolyline = null;
 let routeStopMarkers = [];
 let highlightedTripId = '';
@@ -571,24 +572,7 @@ function getRouteOverlayVehicle() {
     return vehicles.get(trackedVehicleId) || null;
   }
 
-  if (selectedLines.size !== 1) {
-    return null;
-  }
-
-  const [lineId] = selectedLines;
-  const candidates = Array.from(vehicles.values())
-    .filter(vehicle => vehicle.routeId === lineId && vehicle.tripId)
-    .sort((left, right) => {
-      if (!userLocation) {
-        return left.id.localeCompare(right.id);
-      }
-
-      const leftDistance = calculateDistance(userLocation.lat, userLocation.lng, left.lat, left.lon);
-      const rightDistance = calculateDistance(userLocation.lat, userLocation.lng, right.lat, right.lon);
-      return leftDistance - rightDistance;
-    });
-
-  return candidates[0] || null;
+  return null;
 }
 
 async function loadTripDetails(vehicle) {
@@ -596,16 +580,26 @@ async function loadTripDetails(vehicle) {
   if (tripDetailsCache.has(cacheKey)) {
     return tripDetailsCache.get(cacheKey);
   }
+  if (tripDetailsInFlight.has(cacheKey)) {
+    return tripDetailsInFlight.get(cacheKey);
+  }
 
   const params = new URLSearchParams({
     lineId: vehicle.routeId,
     direction: vehicle.destination
   });
-  const trip = unwrapTripPayload(
-    await fetchJson(`/api/routes/trips/${encodeURIComponent(vehicle.tripId)}?${params.toString()}`)
-  );
-  tripDetailsCache.set(cacheKey, trip);
-  return trip;
+  const request = fetchJson(`/api/routes/trips/${encodeURIComponent(vehicle.tripId)}?${params.toString()}`)
+    .then(response => {
+      const trip = unwrapTripPayload(response);
+      tripDetailsCache.set(cacheKey, trip);
+      return trip;
+    })
+    .finally(() => {
+      tripDetailsInFlight.delete(cacheKey);
+    });
+
+  tripDetailsInFlight.set(cacheKey, request);
+  return request;
 }
 
 function drawRouteOverlay(vehicle, trip) {

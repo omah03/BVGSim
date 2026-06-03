@@ -48,7 +48,7 @@ public class BvgRadarClient {
             Map<String, Object> tripResponse = restTemplate.getForObject(buildTripUrl(tripId), Map.class);
             return tripResponse != null ? tripResponse : Collections.emptyMap();
         } catch (RestClientException e) {
-            System.err.println("Exact BVG trip lookup failed; trying active trips for line " + lineName + ".");
+            // Radar trip IDs are not always accepted by the trips endpoint, so fall back to active line trips.
         }
 
         return fetchActiveLineTrip(tripId, lineName, direction);
