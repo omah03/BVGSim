@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @RestController
 @RequestMapping("/api/vehicle-positions")
@@ -18,14 +19,21 @@ public class VehicleController {
     private final RestTemplate rest = new RestTemplate();
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<Map<String,Object>> getPositions(@RequestParam String line) {
-        String url = 
-          "https://v6.bvg.transport.rest/api/vehicle-positions?"
-          + "type=bus&line=" + line;
+    public List<Map<String,Object>> getPositions(
+        @RequestParam String line,
+        @RequestParam(required = false) String type
+    ) {
+        UriComponentsBuilder url = UriComponentsBuilder
+            .fromHttpUrl("https://v6.bvg.transport.rest/api/vehicle-positions")
+            .queryParam("line", line);
+        if (type != null && !type.isBlank()) {
+            url.queryParam("type", type);
+        }
+
         try {
             @SuppressWarnings("unchecked")
             List<Map<String,Object>> data =
-              rest.getForObject(url, List.class);
+              rest.getForObject(url.toUriString(), List.class);
             return data != null ? data : Collections.emptyList();
         } catch (RestClientException e) {
             return Collections.emptyList();

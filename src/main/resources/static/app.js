@@ -1460,11 +1460,13 @@ function compareLineIds(left, right) {
 
 function lineCategory(lineId) {
   const first = String(lineId || '').charAt(0).toUpperCase();
-  if (/\d/.test(first)) return 0;
-  if (first === 'M') return 1;
-  if (first === 'X') return 2;
-  if (first === 'N') return 3;
-  return 4;
+  if (first === 'U') return 0;
+  if (first === 'S') return 1;
+  if (/\d/.test(first)) return 2;
+  if (first === 'M') return 3;
+  if (first === 'X') return 4;
+  if (first === 'N') return 5;
+  return 6;
 }
 
 function lineNumber(lineId) {

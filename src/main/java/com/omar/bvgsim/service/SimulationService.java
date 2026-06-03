@@ -216,9 +216,39 @@ public class SimulationService {
         Map<String, Object> line = (Map<String, Object>) lineValue;
         Object lineName = line.get("name");
         Object lineMode = line.get("mode");
+        Object lineProduct = line.get("product");
 
-        if (lineName instanceof String && lineMode instanceof String && SUPPORTED_MODES.contains(lineMode)) {
-            return new LineRef((String) lineName, (String) lineMode);
+        if (lineName instanceof String) {
+            String normalizedMode = normalizeMode((String) lineName, lineProduct, lineMode);
+            if (normalizedMode != null) {
+                return new LineRef((String) lineName, normalizedMode);
+            }
+        }
+
+        return null;
+    }
+
+    private String normalizeMode(String lineName, Object product, Object mode) {
+        if (product instanceof String productValue && SUPPORTED_MODES.contains(productValue)) {
+            return productValue;
+        }
+
+        if (mode instanceof String modeValue && SUPPORTED_MODES.contains(modeValue)) {
+            return modeValue;
+        }
+
+        String normalizedLineName = lineName == null ? "" : lineName.toUpperCase();
+        if (normalizedLineName.startsWith("U")) {
+            return "subway";
+        }
+        if (normalizedLineName.startsWith("S")) {
+            return "suburban";
+        }
+        if (normalizedLineName.startsWith("RB") || normalizedLineName.startsWith("RE")) {
+            return "regional";
+        }
+        if (normalizedLineName.startsWith("F")) {
+            return "ferry";
         }
 
         return null;
