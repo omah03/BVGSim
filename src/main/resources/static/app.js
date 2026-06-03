@@ -36,6 +36,7 @@ let routePolyline = null;
 let routeStopMarkers = [];
 let journeyPolylines = [];
 let journeyStopMarkers = [];
+let journeyTransitLegs = [];
 let plannedLineIds = new Set();
 let highlightedTripId = '';
 let locationControlButton = null;
@@ -433,6 +434,7 @@ function renderJourneyPlan(result) {
   selectedLines.clear();
   trackedVehicleId = '';
   clearRouteOverlay();
+  journeyTransitLegs = [];
 
   const bounds = new google.maps.LatLngBounds();
   const transitSteps = [];
@@ -471,15 +473,17 @@ function renderJourneyPlan(result) {
         loadVehiclesForLine(lineId);
       }
 
-      transitSteps.push({
+      const transitLeg = {
         lineId,
         mode,
         color,
-        departure: step.transit.departure_stop?.name,
-        arrival: step.transit.arrival_stop?.name,
+        departure: stopDetails(step.transit.departure_stop),
+        arrival: stopDetails(step.transit.arrival_stop),
         stops: step.transit.num_stops || 0,
         headsign: step.transit.headsign || ''
-      });
+      };
+      transitSteps.push(transitLeg);
+      journeyTransitLegs.push(transitLeg);
     } else {
       journeyPolylines.push(new google.maps.Polyline({
         map,
@@ -504,11 +508,12 @@ function renderJourneyPlan(result) {
 
   if (!bounds.isEmpty()) {
     map.fitBounds(bounds, 48);
+    hasFitSelection = true;
   }
 
   renderJourneySummary(leg, transitSteps);
   renderEverything();
-  updateStatus('Route planned. Live vehicles are highlighted for the required lines.');
+  updateStatus('Route planned. Possible live vehicles are highlighted for the required lines.');
 }
 
 function addJourneyStopMarker(stop, color, label) {
@@ -540,18 +545,37 @@ function addJourneyStopMarker(stop, color, label) {
 
 function renderJourneySummary(leg, transitSteps) {
   const stepText = transitSteps.length
-    ? transitSteps.map(step => {
-      const stops = step.stops === 1 ? '1 stop' : `${step.stops} stops`;
-      return `${escapeHtml(modeDisplayName(step.mode))} ${escapeHtml(step.lineId)} to ${escapeHtml(step.headsign || step.arrival || 'destination')} (${escapeHtml(stops)})`;
-    }).join('<br>')
+    ? transitSteps.map(step => journeyLegHtml(step)).join('')
     : 'Walk to destination';
 
   els.journeySummary.innerHTML = `
     <strong>${escapeHtml(leg.duration?.text || 'Transit route')} · ${escapeHtml(leg.distance?.text || '')}</strong>
-    ${stepText}<br>
-    Click a live vehicle on a highlighted line to see its real remaining stops.
+    ${stepText}
   `;
   els.journeySummary.classList.add('visible');
+}
+
+function journeyLegHtml(step) {
+  const stops = step.stops === 1 ? '1 stop' : `${step.stops} stops`;
+  const destination = step.headsign || step.arrival?.name || 'destination';
+  return `
+    <div class="journey-leg">
+      <div class="journey-line" style="background:${escapeHtml(step.color)}">${escapeHtml(step.lineId)}</div>
+      <div>
+        ${escapeHtml(modeDisplayName(step.mode))} to ${escapeHtml(destination)}
+        <small>${escapeHtml(step.departure?.name || 'Board')} → ${escapeHtml(step.arrival?.name || 'Alight')} · ${escapeHtml(stops)}</small>
+      </div>
+    </div>
+  `;
+}
+
+function stopDetails(stop) {
+  const location = stop?.location;
+  return {
+    name: stop?.name || '',
+    lat: location ? location.lat() : null,
+    lng: location ? location.lng() : null
+  };
 }
 
 function clearJourneyPlan(options = {}) {
@@ -559,6 +583,7 @@ function clearJourneyPlan(options = {}) {
   journeyStopMarkers.forEach(marker => marker.setMap(null));
   journeyPolylines = [];
   journeyStopMarkers = [];
+  journeyTransitLegs = [];
 
   if (!options.keepSelections) {
     plannedLineIds.forEach(lineId => selectedLines.delete(lineId));
@@ -572,6 +597,7 @@ function clearJourneyPlan(options = {}) {
 
   els.journeySummary.classList.remove('visible');
   els.journeySummary.innerHTML = '';
+  hasFitSelection = false;
   renderEverything();
 }
 
@@ -1149,8 +1175,10 @@ function estimateHeadingFromTrip(vehicle, trip) {
 }
 
 function applyVehicleMarkerStyle(marker, vehicle) {
-  const color = getLineColor(vehicle.routeId);
+  const journeyLeg = journeyLegForVehicle(vehicle);
+  const color = journeyLeg?.color || getLineColor(vehicle.routeId);
   const isTracked = trackedVehicleId === vehicle.id;
+  const isJourneyVehicle = Boolean(journeyLeg);
   const cachedTrip = getCachedTripForVehicle(vehicle);
   const estimatedHeading = cachedTrip ? estimateHeadingFromTrip(vehicle, cachedTrip) : null;
   const heading = Number.isFinite(vehicle.heading) ? vehicle.heading : estimatedHeading;
@@ -1163,10 +1191,10 @@ function applyVehicleMarkerStyle(marker, vehicle) {
     rotation: hasHeading ? heading : 0,
     fillColor: color,
     fillOpacity: 1,
-    strokeColor: isTracked ? '#111827' : '#ffffff',
-    strokeWeight: isTracked ? 4 : 3,
+    strokeColor: isTracked ? '#111827' : (isJourneyVehicle ? '#22c55e' : '#ffffff'),
+    strokeWeight: isTracked ? 4 : (isJourneyVehicle ? 4 : 3),
     anchor: new google.maps.Point(0, 2),
-    scale: hasHeading ? (isTracked ? 7.2 : 6.1) : (isTracked ? 8 : 6.5)
+    scale: hasHeading ? (isTracked ? 7.2 : (isJourneyVehicle ? 6.8 : 6.1)) : (isTracked ? 8 : (isJourneyVehicle ? 7.2 : 6.5))
   });
   marker.setLabel({
     text: vehicle.routeId,
@@ -1174,7 +1202,33 @@ function applyVehicleMarkerStyle(marker, vehicle) {
     fontSize: '10px',
     fontWeight: '800'
   });
-  marker.setZIndex(isTracked ? 1000 : 500);
+  marker.setZIndex(isTracked ? 1000 : (isJourneyVehicle ? 760 : 500));
+}
+
+function journeyLegForVehicle(vehicle) {
+  if (!journeyTransitLegs.length) {
+    return null;
+  }
+
+  const legs = journeyTransitLegs.filter(leg => leg.lineId === vehicle.routeId);
+  if (!legs.length) {
+    return null;
+  }
+
+  return legs
+    .map(leg => ({
+      leg,
+      distance: distanceToStop(vehicle, leg.departure)
+    }))
+    .sort((left, right) => left.distance - right.distance)[0].leg;
+}
+
+function distanceToStop(vehicle, stop) {
+  if (!stop || !Number.isFinite(stop.lat) || !Number.isFinite(stop.lng)) {
+    return Infinity;
+  }
+
+  return calculateDistance(vehicle.lat, vehicle.lon, stop.lat, stop.lng);
 }
 
 function getCachedTripForVehicle(vehicle) {
@@ -1183,12 +1237,23 @@ function getCachedTripForVehicle(vehicle) {
 }
 
 function vehiclePopup(vehicle) {
+  const journeyLeg = journeyLegForVehicle(vehicle);
+  const journeyContext = journeyLeg ? journeyVehicleContext(vehicle, journeyLeg) : '';
   return `
     <strong>${escapeHtml(modeDisplayName(vehicle.mode))} ${escapeHtml(vehicle.routeId)} - ${escapeHtml(shortVehicleId(vehicle.id))}</strong><br>
+    ${journeyContext}
     Vehicle: ${escapeHtml(vehicle.id)}<br>
     Destination: ${escapeHtml(vehicle.destination)}<br>
     Position: ${vehicle.lat.toFixed(5)}, ${vehicle.lon.toFixed(5)}
   `;
+}
+
+function journeyVehicleContext(vehicle, journeyLeg) {
+  const distance = distanceToStop(vehicle, journeyLeg.departure);
+  const distanceText = Number.isFinite(distance)
+    ? `${Math.round(distance)}m from ${journeyLeg.departure.name || 'boarding stop'}`
+    : `serves planned line ${journeyLeg.lineId}`;
+  return `Possible vehicle for your trip: ${escapeHtml(distanceText)}<br>`;
 }
 
 function countVehiclesForLine(lineId) {
