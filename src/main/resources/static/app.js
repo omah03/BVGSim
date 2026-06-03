@@ -12,6 +12,7 @@ const LINE_COLORS = [
   '#65a30d',
   '#ca8a04'
 ];
+const MAX_JOURNEY_VEHICLES_PER_LEG = 3;
 
 let map = null;
 let infoWindow = null;
@@ -149,6 +150,10 @@ function wireControls() {
 
   els.lineSearch.addEventListener('input', renderLineList);
   els.clearLines.addEventListener('click', () => {
+    if (journeyTransitLegs.length > 0) {
+      clearJourneyPlan({ keepInputs: true, keepSelections: false });
+      return;
+    }
     selectedLines.clear();
     trackedVehicleId = '';
     hasFitSelection = false;
@@ -308,6 +313,9 @@ function renderLineList() {
     checkbox.type = 'checkbox';
     checkbox.checked = selectedLines.has(line.id);
     checkbox.addEventListener('change', () => {
+      if (journeyTransitLegs.length > 0) {
+        clearJourneyPlan({ keepInputs: true, keepSelections: false });
+      }
       if (checkbox.checked) {
         selectedLines.add(line.id);
         loadVehiclesForLine(line.id);
@@ -341,7 +349,10 @@ async function loadVehiclesForLine(lineId) {
     return selectedLineLoads.get(lineId);
   }
 
-  updateStatus(`Loading all live vehicles for line ${lineId}...`);
+  const isPlannedLine = plannedLineIds.has(lineId) || journeyTransitLegs.some(leg => leg.lineId === lineId);
+  updateStatus(isPlannedLine
+    ? `Loading live candidates for ${lineId}...`
+    : `Loading all live vehicles for line ${lineId}...`);
 
   const request = fetchJson(`/api/routes/vehicles/${encodeURIComponent(lineId)}`)
     .then(lineVehicles => {
@@ -363,7 +374,9 @@ async function loadVehiclesForLine(lineId) {
     .catch(error => {
       console.error(`Could not load vehicles for line ${lineId}:`, error);
       if (selectedLines.has(lineId)) {
-        updateStatus(`Could not load all vehicles for line ${lineId}. Waiting for live stream...`, true);
+        updateStatus(isPlannedLine
+          ? `Could not load live candidates for ${lineId}. Waiting for live stream...`
+          : `Could not load all vehicles for line ${lineId}. Waiting for live stream...`, true);
       }
     })
     .finally(() => {
@@ -513,7 +526,7 @@ function renderJourneyPlan(result) {
 
   renderJourneySummary(leg, transitSteps);
   renderEverything();
-  updateStatus('Route planned. Possible live vehicles are highlighted for the required lines.');
+  updateStatus('Route planned. Showing likely vehicles for each required transit leg.');
 }
 
 function addJourneyStopMarker(stop, color, label) {
@@ -683,35 +696,129 @@ function focusVehicle(vehicleId) {
 }
 
 function getVisibleVehicles() {
+  if (trackedVehicleId) {
+    return vehicles.has(trackedVehicleId) ? [vehicles.get(trackedVehicleId)] : [];
+  }
+
+  if (journeyTransitLegs.length > 0) {
+    return getJourneyCandidateVehicles();
+  }
+
   if (selectedLines.size === 0) {
     return [];
   }
 
-  const visibleVehicles = Array.from(vehicles.values())
-    .filter(vehicle => selectedLines.has(vehicle.routeId));
+  return selectedLineVehicles();
+}
 
-  if (trackedVehicleId) {
-    return visibleVehicles.filter(vehicle => vehicle.id === trackedVehicleId);
+function selectedLineVehicles() {
+  return Array.from(vehicles.values())
+    .filter(vehicle => selectedLines.has(vehicle.routeId))
+    .sort((a, b) => compareLineIds(a.routeId, b.routeId) || a.id.localeCompare(b.id));
+}
+
+function selectableVehicles() {
+  const candidates = journeyTransitLegs.length > 0
+    ? getJourneyCandidateVehicles()
+    : selectedLineVehicles();
+  const trackedVehicle = trackedVehicleId ? vehicles.get(trackedVehicleId) : null;
+
+  if (trackedVehicle && !candidates.some(vehicle => vehicle.id === trackedVehicle.id)) {
+    return [trackedVehicle, ...candidates];
   }
 
-  return visibleVehicles.sort((a, b) =>
-    compareLineIds(a.routeId, b.routeId) || a.id.localeCompare(b.id)
-  );
+  return candidates;
+}
+
+function getJourneyCandidateVehicles() {
+  const seenVehicleIds = new Set();
+  const candidates = [];
+
+  journeyTransitLegs.forEach(leg => {
+    journeyVehiclesForLeg(leg).forEach(vehicle => {
+      if (!seenVehicleIds.has(vehicle.id)) {
+        seenVehicleIds.add(vehicle.id);
+        candidates.push(vehicle);
+      }
+    });
+  });
+
+  return candidates;
+}
+
+function journeyVehiclesForLeg(leg) {
+  if (!leg?.lineId) {
+    return [];
+  }
+
+  const lineVehicles = Array.from(vehicles.values())
+    .filter(vehicle => vehicle.routeId === leg.lineId && journeyModeCompatible(vehicle, leg));
+  const directionMatches = lineVehicles.filter(vehicle => journeyDirectionCompatible(vehicle, leg));
+  const pool = directionMatches.length > 0 ? directionMatches : lineVehicles;
+
+  return pool
+    .map(vehicle => ({
+      vehicle,
+      distance: distanceToStop(vehicle, leg.departure)
+    }))
+    .sort((left, right) =>
+      left.distance - right.distance || left.vehicle.id.localeCompare(right.vehicle.id)
+    )
+    .slice(0, MAX_JOURNEY_VEHICLES_PER_LEG)
+    .map(entry => entry.vehicle);
+}
+
+function journeyModeCompatible(vehicle, leg) {
+  if (!leg.mode || leg.mode === 'unknown' || !vehicle.mode || vehicle.mode === 'unknown') {
+    return true;
+  }
+
+  return vehicle.mode === leg.mode;
+}
+
+function journeyDirectionCompatible(vehicle, leg) {
+  const destination = normalizeDirectionText(vehicle.destination);
+  if (!destination || destination === 'unknown destination') {
+    return true;
+  }
+
+  const targets = [leg.headsign, leg.arrival?.name]
+    .map(normalizeDirectionText)
+    .filter(value => value.length > 2);
+  if (targets.length === 0) {
+    return true;
+  }
+
+  return targets.some(target => destination.includes(target) || target.includes(destination));
+}
+
+function normalizeDirectionText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 function updateVehicleSelect() {
-  const candidates = Array.from(vehicles.values())
-    .filter(vehicle => selectedLines.has(vehicle.routeId))
-    .sort((a, b) => compareLineIds(a.routeId, b.routeId) || a.id.localeCompare(b.id));
+  const isJourneyMode = journeyTransitLegs.length > 0;
+  const candidates = selectableVehicles();
 
   const previousValue = trackedVehicleId;
   els.vehicleSelect.innerHTML = '';
 
   const allOption = document.createElement('option');
   allOption.value = '';
-  allOption.textContent = selectedLines.size === 0
-    ? 'Select lines first'
-    : `All vehicles on selected lines (${candidates.length})`;
+  if (isJourneyMode) {
+    allOption.textContent = candidates.length === 0
+      ? 'Waiting for route vehicles'
+      : `Possible vehicles for route (${candidates.length})`;
+  } else {
+    allOption.textContent = selectedLines.size === 0
+      ? 'Select lines first'
+      : `All vehicles on selected lines (${candidates.length})`;
+  }
   els.vehicleSelect.appendChild(allOption);
 
   candidates.forEach(vehicle => {
@@ -721,7 +828,7 @@ function updateVehicleSelect() {
     els.vehicleSelect.appendChild(option);
   });
 
-  els.vehicleSelect.disabled = selectedLines.size === 0 || candidates.length === 0;
+  els.vehicleSelect.disabled = (!isJourneyMode && selectedLines.size === 0) || candidates.length === 0;
   if (previousValue && candidates.some(vehicle => vehicle.id === previousValue)) {
     els.vehicleSelect.value = previousValue;
   } else {
@@ -731,6 +838,28 @@ function updateVehicleSelect() {
 
 function updateLegend() {
   els.legendContent.innerHTML = '';
+
+  if (journeyTransitLegs.length > 0) {
+    journeyTransitLegs.forEach(leg => {
+      const count = journeyVehiclesForLeg(leg).length;
+      const vehicleText = count === 1 ? '1 likely vehicle' : `${count} likely vehicles`;
+      appendLegendItem(leg.color || getLineColor(leg.lineId), `${leg.lineId}: ${vehicleText}`);
+    });
+
+    if (getJourneyCandidateVehicles().length === 0) {
+      appendLegendItem('#808080', 'Waiting for matching live vehicles');
+    }
+
+    const nearestVehicle = findNearestVehicle();
+    if (nearestVehicle) {
+      appendLegendItem('#111827', `Nearest candidate: ${shortVehicleId(nearestVehicle.vehicleId)} (${Math.round(nearestVehicle.distance)}m)`);
+    }
+
+    if (highlightedTripId && routeStopMarkers.length > 0) {
+      appendLegendItem('#111827', `${routeStopMarkers.length} remaining ${routeStopMarkers.length === 1 ? 'stop' : 'stops'}`);
+    }
+    return;
+  }
 
   if (selectedLines.size === 0) {
     appendLegendItem('#808080', 'Select lines to show vehicles');
@@ -764,6 +893,19 @@ function appendLegendItem(color, label) {
 }
 
 function updateStatusForSelection() {
+  if (journeyTransitLegs.length > 0) {
+    const visibleCount = getJourneyCandidateVehicles().length;
+    const vehicleText = visibleCount === 1 ? '1 likely vehicle' : `${visibleCount} likely vehicles`;
+    if (trackedVehicleId) {
+      updateStatus(`Tracking ${trackedVehicleId}. Remaining stops update when trip data is available.`);
+    } else if (visibleCount > 0) {
+      updateStatus(`Showing ${vehicleText} for your planned route. Other line vehicles are hidden.`);
+    } else {
+      updateStatus('Waiting for live vehicles that match your planned route...');
+    }
+    return;
+  }
+
   if (selectedLines.size === 0) {
     updateStatus('Select one or more lines. Other vehicles stay hidden.');
     return;
