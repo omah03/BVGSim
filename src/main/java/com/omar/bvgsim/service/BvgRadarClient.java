@@ -16,16 +16,33 @@ public class BvgRadarClient {
     private static final double BERLIN_WEST = 13.0883;
     private static final double BERLIN_SOUTH = 52.3382;
     private static final double BERLIN_EAST = 13.7611;
-    private static final int RADAR_RESULT_LIMIT = 4096;
+    private static final int RADAR_RESULT_LIMIT = 1024;
+    private static final long RADAR_CACHE_TTL_MS = 5000;
+    private static final long RADAR_ERROR_BACKOFF_MS = 30000;
+    private static final long RADAR_STALE_CACHE_MS = 120000;
+    private static final long RADAR_ERROR_LOG_INTERVAL_MS = 60000;
 
     private final RestTemplate restTemplate = new RestTemplate();
     private final String apiBaseUrl;
+    private volatile List<Map<String, Object>> cachedMovements = Collections.emptyList();
+    private volatile long cachedMovementsAt = 0L;
+    private volatile long retryRadarAfter = 0L;
+    private volatile long lastRadarErrorLogAt = 0L;
 
     public BvgRadarClient(@Value("${bvg.api.base-url:https://v6.bvg.transport.rest}") String apiBaseUrl) {
         this.apiBaseUrl = apiBaseUrl;
     }
 
-    public List<Map<String, Object>> fetchBerlinMovements() {
+    public synchronized List<Map<String, Object>> fetchBerlinMovements() {
+        long now = System.currentTimeMillis();
+        if (!cachedMovements.isEmpty() && now - cachedMovementsAt < RADAR_CACHE_TTL_MS) {
+            return cachedMovements;
+        }
+
+        if (now < retryRadarAfter) {
+            return usableCachedMovements(now);
+        }
+
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> radarResponse = restTemplate.getForObject(buildRadarUrl(), Map.class);
@@ -33,13 +50,37 @@ public class BvgRadarClient {
             if (radarResponse != null && radarResponse.containsKey("movements")) {
                 @SuppressWarnings("unchecked")
                 List<Map<String, Object>> movements = (List<Map<String, Object>>) radarResponse.get("movements");
-                return movements != null ? movements : Collections.emptyList();
+                cachedMovements = movements != null ? movements : Collections.emptyList();
+                cachedMovementsAt = now;
+                retryRadarAfter = 0L;
+                return cachedMovements;
             }
         } catch (Exception e) {
-            System.err.println("Error fetching BVG radar data: " + e.getMessage());
+            retryRadarAfter = now + RADAR_ERROR_BACKOFF_MS;
+            logRadarError(e, now);
+        }
+
+        return usableCachedMovements(now);
+    }
+
+    private List<Map<String, Object>> usableCachedMovements(long now) {
+        if (!cachedMovements.isEmpty() && now - cachedMovementsAt <= RADAR_STALE_CACHE_MS) {
+            return cachedMovements;
         }
 
         return Collections.emptyList();
+    }
+
+    private void logRadarError(Exception e, long now) {
+        if (now - lastRadarErrorLogAt < RADAR_ERROR_LOG_INTERVAL_MS) {
+            return;
+        }
+
+        lastRadarErrorLogAt = now;
+        System.err.println("BVG radar temporarily unavailable; retrying in "
+            + (RADAR_ERROR_BACKOFF_MS / 1000)
+            + "s. "
+            + e.getMessage());
     }
 
     public Map<String, Object> fetchTrip(String tripId, String lineName, String direction) {
