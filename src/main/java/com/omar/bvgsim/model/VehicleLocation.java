@@ -6,6 +6,7 @@ public record VehicleLocation(
     String routeId,
     String vehicleId,
     String tripId,
+    String mode,
     double lat,
     double lon,
     Instant timestamp,

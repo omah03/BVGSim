@@ -278,9 +278,9 @@
   </style>
 </head>
 <body>
-  <div id="controls" aria-label="Bus tracking controls">
+  <div id="controls" aria-label="Transit tracking controls">
     <div class="panel-header">
-      <div class="control-title">BVG Bus Tracker</div>
+      <div class="control-title">BVG Transit Tracker</div>
       <button id="togglePanel" class="icon-button" type="button" title="Collapse controls" aria-expanded="true">−</button>
     </div>
     <div class="panel-body">
@@ -292,13 +292,13 @@
           <input id="lineSearch" type="search" placeholder="Search line..." autocomplete="off" />
           <button id="clearLines" class="clear-button" type="button">Clear</button>
         </div>
-        <div id="lineList" class="line-list" aria-label="Selectable bus lines">
+        <div id="lineList" class="line-list" aria-label="Selectable transit lines">
           <div class="empty-state">Loading active lines...</div>
         </div>
       </div>
       <div class="control-group" id="vehicleSelectContainer">
         <div class="section-title">
-          <label for="vehicleSelect">Bus</label>
+          <label for="vehicleSelect">Vehicle</label>
         </div>
         <select id="vehicleSelect" disabled>
           <option value="">Select lines first</option>
@@ -314,7 +314,7 @@
     <div id="legend-content">
       <div class="legend-item">
         <div class="legend-color" style="background-color: #808080;"></div>
-        <span>Loading active bus destinations...</span>
+        <span>Loading active transit lines...</span>
       </div>
     </div>
   </div>

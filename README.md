@@ -1,7 +1,7 @@
-# BVG Real-Time Bus Tracker
+# BVG Real-Time Transit Tracker
 
-A comprehensive real-time bus tracking application for Berlin's BVG public transport system, featuring interactive maps, geolocation tracking, and color-coded destinations.
-Lets riders choose one or more active BVG bus lines, hide everything else, and track a specific bus from the selected lines.
+A comprehensive real-time transit tracking application for Berlin's BVG/VBB network, featuring interactive maps, geolocation tracking, and color-coded destinations.
+Lets riders choose one or more active lines across buses, U-Bahn, S-Bahn, trams, ferries, and regional services, hide everything else, and track a specific vehicle from the selected lines.
  **[Live Application](https://bvgsim-production.up.railway.app)** |  **[Demo Version](https://omah03.github.io/BVGSim/)** |  **[Source Code](https://github.com/omah03/BVGSim)**
 
 ##  Application Screenshots
@@ -20,17 +20,17 @@ Lets riders choose one or more active BVG bus lines, hide everything else, and t
 
 ## 🚌 Key Features
 
-- ** Real-time tracking** of BVG buses and trains using the official BVG API v6
+- ** Real-time tracking** of BVG/VBB vehicles using the official BVG API v6
 - ** Interactive map** with Google Maps showing live vehicle positions across Berlin
 - ** Color-coded selected lines** with clear vehicle labels and destination details
 - ** Geolocation support** to find and track nearest vehicles with distance calculations
 - ** Individual vehicle tracking** from the selected line set with detailed destination information
-- ** Remaining stop and trip-path highlights** for the focused bus, bounded by your nearest stop when geolocation is active
+- ** Remaining stop and trip-path highlights** for the focused vehicle, bounded by your nearest stop when geolocation is active
 - ** Server-sent events** for real-time updates every second
 - ** Responsive design** optimized for desktop and mobile devices
 - ** Live route visualization** with actual BVG line data and stop information
 - ** Multi-line selection** based on vehicle activity and availability
-- ** Rate-limit conscious live feed** using one shared stream for line filtering and bus tracking
+- ** Rate-limit conscious live feed** using one shared stream for line filtering and vehicle tracking
 
 ##  Tech Stack
 
@@ -92,9 +92,9 @@ The application is deployed and running live on Railway:
 
 ##  How to Use
 
-1. ** Select one or more bus lines** from the line picker
-2. ** Choose a specific vehicle** from the selected lines, or view all selected-line buses
-3. ** Enable location tracking** to find nearest buses and calculate distances
+1. ** Select one or more transit lines** from the line picker
+2. ** Choose a specific vehicle** from the selected lines, or view all selected-line vehicles
+3. ** Enable location tracking** to find nearest vehicles and calculate distances
 4. ** Click vehicle markers** for detailed information including destination and position
 5. ** Use the legend** to understand color coding for different destinations
 6. ** Works seamlessly** on both desktop and mobile devices

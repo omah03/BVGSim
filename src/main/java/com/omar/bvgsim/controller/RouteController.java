@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,16 @@ import com.omar.bvgsim.service.VehicleIdFormatter;
 @RestController
 @RequestMapping("/api/routes")
 public class RouteController {
+    private static final Set<String> SUPPORTED_MODES = Set.of(
+        "bus",
+        "subway",
+        "suburban",
+        "tram",
+        "ferry",
+        "regional",
+        "express"
+    );
+
     @Autowired
     private RouteLoader loader;
 
@@ -39,21 +50,23 @@ public class RouteController {
     public List<Map<String, Object>> getLines() {
         List<Map<String, Object>> movements = radarClient.fetchBerlinMovements();
 
-        Map<String, Long> lineCounts = movements.stream()
-            .map(this::extractBusLineName)
+        Map<LineRef, Long> lineCounts = movements.stream()
+            .map(this::extractLineRef)
             .filter(Objects::nonNull)
             .collect(Collectors.groupingBy(
-                lineName -> lineName,
+                lineRef -> lineRef,
                 Collectors.counting()
             ));
 
         if (!lineCounts.isEmpty()) {
             return lineCounts.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey(this::compareLineIds))
+                .sorted((left, right) -> compareLineIds(left.getKey().name(), right.getKey().name()))
                 .map(entry -> {
+                    LineRef lineRef = entry.getKey();
                     Map<String, Object> lineInfo = new HashMap<>();
-                    lineInfo.put("id", entry.getKey());
-                    lineInfo.put("name", "Bus Line " + entry.getKey());
+                    lineInfo.put("id", lineRef.name());
+                    lineInfo.put("name", displayModeName(lineRef.mode()) + " " + lineRef.name());
+                    lineInfo.put("mode", lineRef.mode());
                     lineInfo.put("vehicleCount", entry.getValue());
                     return lineInfo;
                 })
@@ -68,8 +81,16 @@ public class RouteController {
         AtomicInteger vehicleCounter = new AtomicInteger(1);
 
         return radarClient.fetchBerlinMovements().stream()
-            .filter(movement -> lineId.equals(extractBusLineName(movement)))
-            .map(movement -> toVehicleInfo(lineId, movement, vehicleCounter.getAndIncrement()))
+            .filter(movement -> {
+                LineRef lineRef = extractLineRef(movement);
+                return lineRef != null && lineId.equals(lineRef.name());
+            })
+            .map(movement -> {
+                LineRef lineRef = extractLineRef(movement);
+                return lineRef == null
+                    ? null
+                    : toVehicleInfo(lineRef, movement, vehicleCounter.getAndIncrement());
+            })
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
     }
@@ -80,15 +101,15 @@ public class RouteController {
 
         return radarClient.fetchBerlinMovements().stream()
             .map(movement -> {
-                String lineId = extractBusLineName(movement);
-                if (lineId == null) {
+                LineRef lineRef = extractLineRef(movement);
+                if (lineRef == null) {
                     return null;
                 }
 
                 int sequenceNumber = vehicleCounters
-                    .computeIfAbsent(lineId, key -> new AtomicInteger(1))
+                    .computeIfAbsent(lineRef.name(), key -> new AtomicInteger(1))
                     .getAndIncrement();
-                return toVehicleInfo(lineId, movement, sequenceNumber);
+                return toVehicleInfo(lineRef, movement, sequenceNumber);
             })
             .filter(Objects::nonNull)
             .sorted(Comparator
@@ -106,7 +127,7 @@ public class RouteController {
         return radarClient.fetchTrip(tripId, lineId, direction);
     }
 
-    private String extractBusLineName(Map<String, Object> movement) {
+    private LineRef extractLineRef(Map<String, Object> movement) {
         Map<String, Object> line = extractMap(movement.get("line"));
         if (line == null) {
             return null;
@@ -115,14 +136,14 @@ public class RouteController {
         Object lineName = line.get("name");
         Object lineMode = line.get("mode");
 
-        if (lineName instanceof String && "bus".equals(lineMode)) {
-            return (String) lineName;
+        if (lineName instanceof String && lineMode instanceof String && SUPPORTED_MODES.contains(lineMode)) {
+            return new LineRef((String) lineName, (String) lineMode);
         }
 
         return null;
     }
 
-    private Map<String, Object> toVehicleInfo(String lineId, Map<String, Object> movement, int sequenceNumber) {
+    private Map<String, Object> toVehicleInfo(LineRef lineRef, Map<String, Object> movement, int sequenceNumber) {
         Map<String, Object> location = extractMap(movement.get("location"));
         if (location == null) {
             return null;
@@ -138,8 +159,9 @@ public class RouteController {
         String destination = movement.get("direction") instanceof String ? (String) movement.get("direction") : null;
 
         Map<String, Object> vehicleInfo = new HashMap<>();
-        vehicleInfo.put("id", VehicleIdFormatter.format(lineId, tripId, sequenceNumber));
-        vehicleInfo.put("lineId", lineId);
+        vehicleInfo.put("id", VehicleIdFormatter.format(lineRef.name(), tripId, sequenceNumber, lineRef.mode()));
+        vehicleInfo.put("lineId", lineRef.name());
+        vehicleInfo.put("mode", lineRef.mode());
         vehicleInfo.put("tripId", tripId);
         vehicleInfo.put("destination", destination != null && !destination.isBlank() ? destination : "Unknown destination");
         vehicleInfo.put("latitude", ((Number) latitude).doubleValue());
@@ -212,6 +234,7 @@ public class RouteController {
                     Map<String, Object> lineInfo = new HashMap<>();
                     lineInfo.put("id", route.getId());
                     lineInfo.put("name", route.getName());
+                    lineInfo.put("mode", "bus");
                     lineInfo.put("vehicleCount", 0L);
                     return lineInfo;
                 })
@@ -220,5 +243,21 @@ public class RouteController {
         }
 
         return new ArrayList<>();
+    }
+
+    private String displayModeName(String mode) {
+        return switch (mode) {
+            case "subway" -> "U-Bahn";
+            case "suburban" -> "S-Bahn";
+            case "tram" -> "Tram";
+            case "ferry" -> "Ferry";
+            case "regional" -> "Regional";
+            case "express" -> "Express";
+            case "bus" -> "Bus";
+            default -> "Line";
+        };
+    }
+
+    private record LineRef(String name, String mode) {
     }
 }

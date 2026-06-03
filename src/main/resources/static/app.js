@@ -146,11 +146,12 @@ async function loadLines() {
     const lines = await fetchJson('/api/routes/lines');
     activeLines = lines.map(line => ({
       id: String(line.id),
-      name: line.name || `Bus Line ${line.id}`,
+      name: line.name || `${modeDisplayName(line.mode)} ${line.id}`,
+      mode: line.mode || 'unknown',
       vehicleCount: Number(line.vehicleCount || 0)
     }));
     renderLineList();
-    updateStatus('Select one or more lines to show buses.');
+    updateStatus('Select one or more lines to show live vehicles.');
   } catch (error) {
     console.error('Could not load active lines:', error);
     updateStatus('Could not load active lines. Retrying with live vehicle data...', true);
@@ -200,6 +201,7 @@ function normalizeVehicle(raw) {
     id,
     routeId,
     tripId: raw.tripId || '',
+    mode: raw.mode || 'unknown',
     lat,
     lon,
     destination: raw.destination || 'Unknown destination',
@@ -238,7 +240,8 @@ function ensureLineExists(lineId) {
 
   activeLines.push({
     id: lineId,
-    name: `Bus Line ${lineId}`,
+    name: `Line ${lineId}`,
+    mode: 'unknown',
     vehicleCount: 0
   });
   activeLines.sort((a, b) => compareLineIds(a.id, b.id));
@@ -291,7 +294,7 @@ function renderLineList() {
     text.className = 'line-option-text';
     text.innerHTML = `
       <strong>${escapeHtml(line.id)}</strong>
-      <small>${lineVehicles} live ${lineVehicles === 1 ? 'bus' : 'buses'}</small>
+      <small>${modeDisplayName(line.mode)} · ${lineVehicles} live</small>
     `;
 
     row.appendChild(checkbox);
@@ -305,7 +308,7 @@ async function loadVehiclesForLine(lineId) {
     return selectedLineLoads.get(lineId);
   }
 
-  updateStatus(`Loading all live buses for line ${lineId}...`);
+  updateStatus(`Loading all live vehicles for line ${lineId}...`);
 
   const request = fetchJson(`/api/routes/vehicles/${encodeURIComponent(lineId)}`)
     .then(lineVehicles => {
@@ -327,7 +330,7 @@ async function loadVehiclesForLine(lineId) {
     .catch(error => {
       console.error(`Could not load vehicles for line ${lineId}:`, error);
       if (selectedLines.has(lineId)) {
-        updateStatus(`Could not load all buses for line ${lineId}. Waiting for live stream...`, true);
+        updateStatus(`Could not load all vehicles for line ${lineId}. Waiting for live stream...`, true);
       }
     })
     .finally(() => {
@@ -431,13 +434,13 @@ function updateVehicleSelect() {
   allOption.value = '';
   allOption.textContent = selectedLines.size === 0
     ? 'Select lines first'
-    : `All buses on selected lines (${candidates.length})`;
+    : `All vehicles on selected lines (${candidates.length})`;
   els.vehicleSelect.appendChild(allOption);
 
   candidates.forEach(vehicle => {
     const option = document.createElement('option');
     option.value = vehicle.id;
-    option.textContent = `${vehicle.routeId} - ${vehicle.id} - ${vehicle.destination}`;
+    option.textContent = `${modeDisplayName(vehicle.mode)} ${vehicle.routeId} - ${vehicle.id} - ${vehicle.destination}`;
     els.vehicleSelect.appendChild(option);
   });
 
@@ -453,7 +456,7 @@ function updateLegend() {
   els.legendContent.innerHTML = '';
 
   if (selectedLines.size === 0) {
-    appendLegendItem('#808080', 'Select lines to show buses');
+    appendLegendItem('#808080', 'Select lines to show vehicles');
     return;
   }
 
@@ -463,9 +466,9 @@ function updateLegend() {
       appendLegendItem(getLineColor(lineId), `Line ${lineId}: ${countVehiclesForLine(lineId)} live`);
     });
 
-  const nearestBus = findNearestBus();
-  if (nearestBus) {
-    appendLegendItem('#111827', `Nearest: ${shortVehicleId(nearestBus.vehicleId)} (${Math.round(nearestBus.distance)}m)`);
+  const nearestVehicle = findNearestVehicle();
+  if (nearestVehicle) {
+    appendLegendItem('#111827', `Nearest: ${shortVehicleId(nearestVehicle.vehicleId)} (${Math.round(nearestVehicle.distance)}m)`);
   }
 
   if (highlightedTripId && routeStopMarkers.length > 0) {
@@ -485,17 +488,17 @@ function appendLegendItem(color, label) {
 
 function updateStatusForSelection() {
   if (selectedLines.size === 0) {
-    updateStatus('Select one or more lines. Other buses stay hidden.');
+    updateStatus('Select one or more lines. Other vehicles stay hidden.');
     return;
   }
 
   const visibleCount = getVisibleVehicles().length;
   const lineText = selectedLines.size === 1 ? '1 line' : `${selectedLines.size} lines`;
-  const busText = visibleCount === 1 ? '1 bus' : `${visibleCount} buses`;
+  const vehicleText = visibleCount === 1 ? '1 vehicle' : `${visibleCount} vehicles`;
   if (trackedVehicleId) {
     updateStatus(`Tracking ${trackedVehicleId}. Updates every second.`);
   } else {
-    updateStatus(`Showing ${busText} across ${lineText}. Updates every second.`);
+    updateStatus(`Showing ${vehicleText} across ${lineText}. Updates every second.`);
   }
 }
 
@@ -742,8 +745,8 @@ function updateRouteInfo(vehicle, remainingStops, isBoundedToLocation, isUnavail
 
   if (isUnavailable) {
     els.routeInfo.innerHTML = `
-      <strong>${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
-      Trip stops are not available from BVG right now. Live bus position is still shown.
+      <strong>${escapeHtml(modeDisplayName(vehicle.mode))} ${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
+      Trip stops are not available from BVG right now. Live vehicle position is still shown.
     `;
     els.routeInfo.classList.add('visible');
     return;
@@ -753,7 +756,7 @@ function updateRouteInfo(vehicle, remainingStops, isBoundedToLocation, isUnavail
   const targetText = isBoundedToLocation ? 'to your nearest stop' : 'to the destination';
   const nextStop = remainingStops[0]?.name ? `Next: ${escapeHtml(remainingStops[0].name)}.` : '';
   els.routeInfo.innerHTML = `
-    <strong>${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
+    <strong>${escapeHtml(modeDisplayName(vehicle.mode))} ${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
     ${stopText} remaining ${targetText}. ${nextStop}
   `;
   els.routeInfo.classList.add('visible');
@@ -930,7 +933,7 @@ function getCachedTripForVehicle(vehicle) {
 
 function vehiclePopup(vehicle) {
   return `
-    <strong>${escapeHtml(vehicle.routeId)} - ${escapeHtml(shortVehicleId(vehicle.id))}</strong><br>
+    <strong>${escapeHtml(modeDisplayName(vehicle.mode))} ${escapeHtml(vehicle.routeId)} - ${escapeHtml(shortVehicleId(vehicle.id))}</strong><br>
     Vehicle: ${escapeHtml(vehicle.id)}<br>
     Destination: ${escapeHtml(vehicle.destination)}<br>
     Position: ${vehicle.lat.toFixed(5)}, ${vehicle.lon.toFixed(5)}
@@ -944,6 +947,27 @@ function countVehiclesForLine(lineId) {
 function getLineColor(lineId) {
   const index = Math.abs(hashString(lineId)) % LINE_COLORS.length;
   return LINE_COLORS[index];
+}
+
+function modeDisplayName(mode) {
+  switch (mode) {
+    case 'subway':
+      return 'U-Bahn';
+    case 'suburban':
+      return 'S-Bahn';
+    case 'tram':
+      return 'Tram';
+    case 'ferry':
+      return 'Ferry';
+    case 'regional':
+      return 'Regional';
+    case 'express':
+      return 'Express';
+    case 'bus':
+      return 'Bus';
+    default:
+      return 'Line';
+  }
 }
 
 function hashString(value) {
@@ -1029,25 +1053,25 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
-function findNearestBus() {
+function findNearestVehicle() {
   if (!userLocationMarker || markers.size === 0) {
     return null;
   }
 
   const userPos = userLocationMarker.getPosition();
-  let nearestBus = null;
+  let nearestVehicle = null;
   let minDistance = Infinity;
 
   markers.forEach((marker, vehicleId) => {
-    const busPos = marker.getPosition();
-    const distance = calculateDistance(userPos.lat(), userPos.lng(), busPos.lat(), busPos.lng());
+    const vehiclePos = marker.getPosition();
+    const distance = calculateDistance(userPos.lat(), userPos.lng(), vehiclePos.lat(), vehiclePos.lng());
     if (distance < minDistance) {
       minDistance = distance;
-      nearestBus = { vehicleId, distance };
+      nearestVehicle = { vehicleId, distance };
     }
   });
 
-  return nearestBus;
+  return nearestVehicle;
 }
 
 function addLocationControl() {

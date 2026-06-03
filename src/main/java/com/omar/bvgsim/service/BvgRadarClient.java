@@ -107,12 +107,12 @@ public class BvgRadarClient {
             .queryParam("onlyCurrentlyRunning", true)
             .queryParam("stopovers", true)
             .queryParam("bus", true)
-            .queryParam("suburban", false)
-            .queryParam("subway", false)
-            .queryParam("tram", false)
-            .queryParam("ferry", false)
-            .queryParam("express", false)
-            .queryParam("regional", false)
+            .queryParam("suburban", true)
+            .queryParam("subway", true)
+            .queryParam("tram", true)
+            .queryParam("ferry", true)
+            .queryParam("express", true)
+            .queryParam("regional", true)
             .toUriString();
     }
 
