@@ -55,26 +55,42 @@ public class SimulationService {
     }
 
     public SseEmitter subscribe(String routeId) {
+        return subscribe(Set.of(routeId));
+    }
+
+    public SseEmitter subscribe(Set<String> routeIds) {
         SseEmitter emitter = new SseEmitter(0L);
-        
-        // Ensure emitter list exists for this route
-        emitters.computeIfAbsent(routeId, k -> new CopyOnWriteArrayList<>()).add(emitter);
-        
-        emitter.onCompletion(() -> {
-            List<SseEmitter> routeEmitters = emitters.get(routeId);
-            if (routeEmitters != null) {
-                routeEmitters.remove(emitter);
-            }
-        });
-        
-        emitter.onTimeout(() -> {
-            List<SseEmitter> routeEmitters = emitters.get(routeId);
-            if (routeEmitters != null) {
-                routeEmitters.remove(emitter);
-            }
-        });
-        
+
+        Set<String> normalizedRouteIds = routeIds.stream()
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(routeId -> !routeId.isBlank())
+            .collect(java.util.stream.Collectors.toSet());
+
+        if (normalizedRouteIds.isEmpty()) {
+            emitter.complete();
+            return emitter;
+        }
+
+        normalizedRouteIds.forEach(routeId ->
+            emitters.computeIfAbsent(routeId, k -> new CopyOnWriteArrayList<>()).add(emitter)
+        );
+
+        Runnable cleanup = () -> removeEmitter(emitter, normalizedRouteIds);
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(cleanup);
+        emitter.onError(error -> cleanup.run());
+
         return emitter;
+    }
+
+    private void removeEmitter(SseEmitter emitter, Set<String> routeIds) {
+        routeIds.forEach(routeId -> {
+            List<SseEmitter> routeEmitters = emitters.get(routeId);
+            if (routeEmitters != null) {
+                routeEmitters.remove(emitter);
+            }
+        });
     }
 
     @Scheduled(fixedRate = 30000)
@@ -132,7 +148,6 @@ public class SimulationService {
                 try {
                     emitter.send(location);
                 } catch (Exception e) {
-                    System.err.println("Failed to send to emitter: " + e.getMessage());
                     subs.remove(emitter);
                 }
             }));

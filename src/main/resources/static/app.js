@@ -17,7 +17,8 @@ const MAX_JOURNEY_VEHICLES_PER_LEG = 3;
 let map = null;
 let infoWindow = null;
 let directionsService = null;
-let eventSource = null;
+let liveStream = null;
+let liveStreamRoutesKey = '';
 let userLocationMarker = null;
 let userLocation = null;
 let watchId = null;
@@ -91,7 +92,6 @@ async function initialize() {
   addLocationControl();
   updateStatus('Loading active lines...');
   await loadLines();
-  startLiveStream();
   setInterval(pruneStaleVehicles, 4000);
   setInterval(updateConnectionStatus, 5000);
 }
@@ -158,6 +158,7 @@ function wireControls() {
     trackedVehicleId = '';
     hasFitSelection = false;
     clearRouteOverlay();
+    syncLiveStream();
     renderEverything();
   });
 
@@ -195,15 +196,29 @@ async function fetchJson(url) {
   return response.json();
 }
 
-function startLiveStream() {
-  if (eventSource) {
-    eventSource.close();
+function syncLiveStream() {
+  const routeIds = Array.from(selectedLines).sort(compareLineIds);
+  const routesKey = routeIds.join(',');
+
+  if (routesKey === liveStreamRoutesKey) {
+    return;
   }
 
-  eventSource = new EventSource('/api/sim/stream/all');
-  eventSource.onopen = () => updateStatusForSelection();
-  eventSource.onerror = () => updateStatus('Live connection interrupted. Reconnecting...', true);
-  eventSource.onmessage = event => {
+  if (liveStream) {
+    liveStream.close();
+    liveStream = null;
+  }
+
+  liveStreamRoutesKey = routesKey;
+  if (routeIds.length === 0) {
+    return;
+  }
+
+  const params = new URLSearchParams({ routes: routesKey });
+  liveStream = new EventSource(`/api/sim/stream?${params.toString()}`);
+  liveStream.onopen = () => updateStatusForSelection();
+  liveStream.onerror = () => updateStatus('Live connection interrupted. Reconnecting...', true);
+  liveStream.onmessage = event => {
     const vehicle = normalizeVehicle(JSON.parse(event.data));
     if (!vehicle) {
       return;
@@ -327,6 +342,7 @@ function renderLineList() {
         }
       }
       hasFitSelection = false;
+      syncLiveStream();
       renderEverything();
       refreshRouteOverlay();
     });
@@ -524,6 +540,7 @@ function renderJourneyPlan(result) {
     hasFitSelection = true;
   }
 
+  syncLiveStream();
   renderJourneySummary(leg, transitSteps);
   renderEverything();
   updateStatus('Route planned. Showing likely vehicles for each required transit leg.');
@@ -611,6 +628,7 @@ function clearJourneyPlan(options = {}) {
   els.journeySummary.classList.remove('visible');
   els.journeySummary.innerHTML = '';
   hasFitSelection = false;
+  syncLiveStream();
   renderEverything();
 }
 
@@ -688,6 +706,7 @@ function focusVehicle(vehicleId) {
   trackedVehicleId = vehicleId;
   selectedLines.add(vehicle.routeId);
   hasFitSelection = true;
+  syncLiveStream();
   renderLineList();
   renderVisibleVehicles();
   updateVehicleSelect();
@@ -922,7 +941,11 @@ function updateStatusForSelection() {
 }
 
 function updateConnectionStatus() {
-  if (!eventSource) {
+  if (selectedLines.size === 0) {
+    return;
+  }
+
+  if (!liveStream) {
     updateStatus('Connecting to live feed...', true);
     return;
   }
