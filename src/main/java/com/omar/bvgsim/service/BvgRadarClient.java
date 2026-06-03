@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -41,13 +42,37 @@ public class BvgRadarClient {
         return Collections.emptyList();
     }
 
-    public Map<String, Object> fetchTrip(String tripId) {
+    public Map<String, Object> fetchTrip(String tripId, String lineName, String direction) {
         try {
             @SuppressWarnings("unchecked")
             Map<String, Object> tripResponse = restTemplate.getForObject(buildTripUrl(tripId), Map.class);
             return tripResponse != null ? tripResponse : Collections.emptyMap();
-        } catch (Exception e) {
-            System.err.println("Error fetching BVG trip data: " + e.getMessage());
+        } catch (RestClientException e) {
+            System.err.println("Exact BVG trip lookup failed; trying active trips for line " + lineName + ".");
+        }
+
+        return fetchActiveLineTrip(tripId, lineName, direction);
+    }
+
+    private Map<String, Object> fetchActiveLineTrip(String tripId, String lineName, String direction) {
+        if (lineName == null || lineName.isBlank()) {
+            return Collections.emptyMap();
+        }
+
+        try {
+            @SuppressWarnings("unchecked")
+            Object tripsResponse = restTemplate.getForObject(buildTripsUrl(lineName), Object.class);
+            List<Map<String, Object>> trips = extractTrips(tripsResponse);
+            if (trips.isEmpty()) {
+                return Collections.emptyMap();
+            }
+
+            return trips.stream()
+                .filter(trip -> matchesTrip(trip, tripId, direction))
+                .findFirst()
+                .orElse(trips.get(0));
+        } catch (RestClientException e) {
+            System.err.println("Active BVG trip fallback failed for line " + lineName + ".");
         }
 
         return Collections.emptyMap();
@@ -72,5 +97,53 @@ public class BvgRadarClient {
             .queryParam("stopovers", true)
             .queryParam("polyline", true)
             .toUriString();
+    }
+
+    private String buildTripsUrl(String lineName) {
+        return UriComponentsBuilder.fromHttpUrl(apiBaseUrl)
+            .path("/trips")
+            .queryParam("lineName", lineName)
+            .queryParam("query", lineName)
+            .queryParam("onlyCurrentlyRunning", true)
+            .queryParam("stopovers", true)
+            .queryParam("bus", true)
+            .queryParam("suburban", false)
+            .queryParam("subway", false)
+            .queryParam("tram", false)
+            .queryParam("ferry", false)
+            .queryParam("express", false)
+            .queryParam("regional", false)
+            .toUriString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractTrips(Object tripsResponse) {
+        if (tripsResponse instanceof List) {
+            return (List<Map<String, Object>>) tripsResponse;
+        }
+
+        if (tripsResponse instanceof Map) {
+            Object trips = ((Map<String, Object>) tripsResponse).get("trips");
+            if (trips instanceof List) {
+                return (List<Map<String, Object>>) trips;
+            }
+        }
+
+        return Collections.emptyList();
+    }
+
+    private boolean matchesTrip(Map<String, Object> trip, String tripId, String direction) {
+        Object id = trip.get("id");
+        Object tripIdValue = trip.get("tripId");
+        if (tripId != null && (tripId.equals(id) || tripId.equals(tripIdValue))) {
+            return true;
+        }
+
+        Object tripDirection = trip.get("direction");
+        if (direction != null && !direction.isBlank() && tripDirection instanceof String) {
+            return ((String) tripDirection).equalsIgnoreCase(direction);
+        }
+
+        return false;
     }
 }

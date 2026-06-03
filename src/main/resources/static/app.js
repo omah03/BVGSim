@@ -19,6 +19,7 @@ let eventSource = null;
 let userLocationMarker = null;
 let userLocation = null;
 let watchId = null;
+let isLocationTracking = false;
 let activeLines = [];
 let selectedLines = new Set();
 let vehicles = new Map();
@@ -32,6 +33,7 @@ const tripDetailsCache = new Map();
 let routePolyline = null;
 let routeStopMarkers = [];
 let highlightedTripId = '';
+let locationControlButton = null;
 
 const els = {
   controls: document.getElementById('controls'),
@@ -41,6 +43,8 @@ const els = {
   clearLines: document.getElementById('clearLines'),
   vehicleSelect: document.getElementById('vehicleSelect'),
   status: document.getElementById('status'),
+  routeInfo: document.getElementById('routeInfo'),
+  locationNotice: document.getElementById('locationNotice'),
   legendContent: document.getElementById('legend-content')
 };
 
@@ -206,8 +210,13 @@ function normalizeVehicle(raw) {
 function upsertVehicle(vehicle) {
   const previous = previousVehiclePositions.get(vehicle.id);
   if (previous) {
-    const heading = calculateBearing(previous.lat, previous.lon, vehicle.lat, vehicle.lon);
-    vehicle.heading = Number.isFinite(heading) ? heading : previous.heading;
+    const distance = calculateDistance(previous.lat, previous.lon, vehicle.lat, vehicle.lon);
+    if (distance >= 3) {
+      const heading = calculateBearing(previous.lat, previous.lon, vehicle.lat, vehicle.lon);
+      vehicle.heading = Number.isFinite(heading) ? heading : previous.heading;
+    } else {
+      vehicle.heading = previous.heading;
+    }
   } else {
     vehicle.heading = null;
   }
@@ -362,6 +371,7 @@ function renderVisibleVehicles() {
       });
       applyVehicleMarkerStyle(nextMarker, vehicle);
       nextMarker.addListener('click', () => {
+        focusVehicle(nextMarker.bvgVehicle.id);
         infoWindow.setContent(vehiclePopup(nextMarker.bvgVehicle));
         infoWindow.open({ anchor: nextMarker, map });
       });
@@ -373,6 +383,22 @@ function renderVisibleVehicles() {
   updateLegend();
   fitSelectionIfNeeded(visibleVehicles);
   refreshRouteOverlay();
+}
+
+function focusVehicle(vehicleId) {
+  const vehicle = vehicles.get(vehicleId);
+  if (!vehicle) {
+    return;
+  }
+
+  trackedVehicleId = vehicleId;
+  selectedLines.add(vehicle.routeId);
+  hasFitSelection = true;
+  renderLineList();
+  renderVisibleVehicles();
+  updateVehicleSelect();
+  refreshRouteOverlay();
+  updateStatusForSelection();
 }
 
 function getVisibleVehicles() {
@@ -529,8 +555,8 @@ async function refreshRouteOverlay() {
   }
 
   try {
-    const trip = await loadTripDetails(vehicle.tripId);
-    if (!vehicles.has(vehicle.id)) {
+    const trip = await loadTripDetails(vehicle);
+    if (!vehicles.has(vehicle.id) || getRouteOverlayVehicle()?.id !== vehicle.id) {
       return;
     }
     drawRouteOverlay(vehicle, trip);
@@ -565,20 +591,30 @@ function getRouteOverlayVehicle() {
   return candidates[0] || null;
 }
 
-async function loadTripDetails(tripId) {
-  if (tripDetailsCache.has(tripId)) {
-    return tripDetailsCache.get(tripId);
+async function loadTripDetails(vehicle) {
+  const cacheKey = `${vehicle.tripId}|${vehicle.routeId}|${vehicle.destination}`;
+  if (tripDetailsCache.has(cacheKey)) {
+    return tripDetailsCache.get(cacheKey);
   }
 
-  const trip = await fetchJson(`/api/routes/trips/${encodeURIComponent(tripId)}`);
-  tripDetailsCache.set(tripId, trip);
+  const params = new URLSearchParams({
+    lineId: vehicle.routeId,
+    direction: vehicle.destination
+  });
+  const trip = unwrapTripPayload(
+    await fetchJson(`/api/routes/trips/${encodeURIComponent(vehicle.tripId)}?${params.toString()}`)
+  );
+  tripDetailsCache.set(cacheKey, trip);
   return trip;
 }
 
 function drawRouteOverlay(vehicle, trip) {
+  applyTripHeading(vehicle, trip);
+
   const stops = extractStopovers(trip);
   if (stops.length === 0) {
     clearRouteOverlay();
+    updateRouteInfo(vehicle, [], false, true);
     return;
   }
 
@@ -594,6 +630,8 @@ function drawRouteOverlay(vehicle, trip) {
 
   clearRouteOverlay();
   highlightedTripId = vehicle.tripId;
+  updateRouteInfo(vehicle, remainingStops, Boolean(userLocation), false);
+  updateStatusForSelection();
 
   if (path.length >= 2) {
     routePolyline = new google.maps.Polyline({
@@ -644,6 +682,29 @@ function drawRouteOverlay(vehicle, trip) {
   updateLegend();
 }
 
+function applyTripHeading(vehicle, trip) {
+  if (Number.isFinite(vehicle.heading)) {
+    return;
+  }
+
+  const heading = estimateHeadingFromTrip(vehicle, trip);
+  if (!Number.isFinite(heading)) {
+    return;
+  }
+
+  vehicle.heading = heading;
+  previousVehiclePositions.set(vehicle.id, {
+    lat: vehicle.lat,
+    lon: vehicle.lon,
+    heading
+  });
+
+  const marker = markers.get(vehicle.id);
+  if (marker) {
+    applyVehicleMarkerStyle(marker, vehicle);
+  }
+}
+
 function routeSegmentPath(vehiclePoint, targetStop, polylinePoints, stops) {
   if (!targetStop) {
     return [];
@@ -652,9 +713,11 @@ function routeSegmentPath(vehiclePoint, targetStop, polylinePoints, stops) {
   if (polylinePoints.length >= 2) {
     const startIndex = nearestPointIndex(polylinePoints, vehiclePoint);
     const endIndex = nearestPointIndex(polylinePoints, targetStop);
-    const from = Math.min(startIndex, endIndex);
-    const to = Math.max(startIndex, endIndex);
-    return [vehiclePoint, ...polylinePoints.slice(from, to + 1), targetStop];
+    if (endIndex >= startIndex) {
+      return [vehiclePoint, ...polylinePoints.slice(startIndex, endIndex + 1), targetStop];
+    }
+
+    return [vehiclePoint, targetStop];
   }
 
   const currentStopIndex = nearestPointIndex(stops, vehiclePoint);
@@ -673,6 +736,33 @@ function clearRouteOverlay() {
   }
   routeStopMarkers.forEach(marker => marker.setMap(null));
   routeStopMarkers = [];
+  updateRouteInfo(null, [], false, false);
+}
+
+function updateRouteInfo(vehicle, remainingStops, isBoundedToLocation, isUnavailable) {
+  if (!vehicle) {
+    els.routeInfo.classList.remove('visible');
+    els.routeInfo.innerHTML = '';
+    return;
+  }
+
+  if (isUnavailable) {
+    els.routeInfo.innerHTML = `
+      <strong>${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
+      Trip stops are not available from BVG right now. Live bus position is still shown.
+    `;
+    els.routeInfo.classList.add('visible');
+    return;
+  }
+
+  const stopText = remainingStops.length === 1 ? '1 stop' : `${remainingStops.length} stops`;
+  const targetText = isBoundedToLocation ? 'to your nearest stop' : 'to the destination';
+  const nextStop = remainingStops[0]?.name ? `Next: ${escapeHtml(remainingStops[0].name)}.` : '';
+  els.routeInfo.innerHTML = `
+    <strong>${escapeHtml(vehicle.routeId)} to ${escapeHtml(vehicle.destination)}</strong>
+    ${stopText} remaining ${targetText}. ${nextStop}
+  `;
+  els.routeInfo.classList.add('visible');
 }
 
 function extractStopovers(trip) {
@@ -681,8 +771,8 @@ function extractStopovers(trip) {
     .map(stopover => {
       const stop = stopover.stop || stopover.station || {};
       const location = stop.location || {};
-      const lat = Number(location.latitude ?? location.lat);
-      const lng = Number(location.longitude ?? location.lng);
+      const lat = Number(location.latitude ?? location.lat ?? stop.latitude ?? stop.lat);
+      const lng = Number(location.longitude ?? location.lng ?? location.lon ?? stop.longitude ?? stop.lng ?? stop.lon);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         return null;
       }
@@ -694,6 +784,18 @@ function extractStopovers(trip) {
       };
     })
     .filter(Boolean);
+}
+
+function unwrapTripPayload(response) {
+  if (!response || typeof response !== 'object') {
+    return {};
+  }
+
+  if (response.trip && typeof response.trip === 'object') {
+    return response.trip;
+  }
+
+  return response;
 }
 
 function extractPolylinePoints(trip) {
@@ -774,23 +876,49 @@ function nearestPointIndex(points, target) {
   return nearestIndex;
 }
 
+function estimateHeadingFromTrip(vehicle, trip) {
+  const vehiclePoint = { lat: vehicle.lat, lng: vehicle.lon };
+  const polylinePoints = extractPolylinePoints(trip);
+
+  if (polylinePoints.length >= 2) {
+    const currentIndex = nearestPointIndex(polylinePoints, vehiclePoint);
+    const nextPoint = polylinePoints[Math.min(currentIndex + 1, polylinePoints.length - 1)];
+    if (nextPoint) {
+      return calculateBearing(vehiclePoint.lat, vehiclePoint.lng, nextPoint.lat, nextPoint.lng);
+    }
+  }
+
+  const stops = extractStopovers(trip);
+  if (stops.length >= 2) {
+    const currentStopIndex = nearestPointIndex(stops, vehiclePoint);
+    const nextStop = stops[Math.min(currentStopIndex + 1, stops.length - 1)];
+    if (nextStop) {
+      return calculateBearing(vehiclePoint.lat, vehiclePoint.lng, nextStop.lat, nextStop.lng);
+    }
+  }
+
+  return null;
+}
+
 function applyVehicleMarkerStyle(marker, vehicle) {
   const color = getLineColor(vehicle.routeId);
   const isTracked = trackedVehicleId === vehicle.id;
-  const scale = isTracked ? 7.2 : 6.1;
-  const heading = Number.isFinite(vehicle.heading) ? vehicle.heading : 0;
+  const cachedTrip = getCachedTripForVehicle(vehicle);
+  const estimatedHeading = cachedTrip ? estimateHeadingFromTrip(vehicle, cachedTrip) : null;
+  const heading = Number.isFinite(vehicle.heading) ? vehicle.heading : estimatedHeading;
+  const hasHeading = Number.isFinite(heading);
 
   marker.bvgVehicle = vehicle;
   marker.setTitle(`${vehicle.routeId} - ${vehicle.destination}`);
   marker.setIcon({
-    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-    rotation: heading,
+    path: hasHeading ? google.maps.SymbolPath.FORWARD_CLOSED_ARROW : google.maps.SymbolPath.CIRCLE,
+    rotation: hasHeading ? heading : 0,
     fillColor: color,
     fillOpacity: 1,
     strokeColor: isTracked ? '#111827' : '#ffffff',
     strokeWeight: isTracked ? 4 : 3,
     anchor: new google.maps.Point(0, 2),
-    scale
+    scale: hasHeading ? (isTracked ? 7.2 : 6.1) : (isTracked ? 8 : 6.5)
   });
   marker.setLabel({
     text: vehicle.routeId,
@@ -799,6 +927,11 @@ function applyVehicleMarkerStyle(marker, vehicle) {
     fontWeight: '800'
   });
   marker.setZIndex(isTracked ? 1000 : 500);
+}
+
+function getCachedTripForVehicle(vehicle) {
+  const cacheKey = `${vehicle.tripId}|${vehicle.routeId}|${vehicle.destination}`;
+  return tripDetailsCache.get(cacheKey) || null;
 }
 
 function vehiclePopup(vehicle) {
@@ -929,17 +1062,13 @@ function addLocationControl() {
   locationControl.type = 'button';
   locationControl.textContent = 'Locate';
   locationControl.title = 'Toggle your location tracking';
+  locationControlButton = locationControl;
 
-  let isTracking = false;
   locationControl.addEventListener('click', () => {
-    if (isTracking) {
+    if (isLocationTracking) {
       stopLocationTracking();
-      locationControl.classList.remove('active');
-      isTracking = false;
     } else {
       startLocationTracking();
-      locationControl.classList.add('active');
-      isTracking = true;
     }
   });
 
@@ -948,10 +1077,11 @@ function addLocationControl() {
 
 function startLocationTracking() {
   if (!('geolocation' in navigator)) {
-    updateStatus('Geolocation is not supported by this browser.', true);
+    showLocationNotice('Your browser does not support location tracking.', true);
     return;
   }
 
+  showLocationNotice('Requesting location access...', false);
   navigator.geolocation.getCurrentPosition(updateUserLocation, handleLocationError, {
     enableHighAccuracy: true,
     timeout: 10000,
@@ -976,6 +1106,9 @@ function stopLocationTracking() {
     userLocationMarker = null;
   }
   userLocation = null;
+  isLocationTracking = false;
+  updateLocationControlState();
+  showLocationNotice('', false);
   refreshRouteOverlay();
   updateLegend();
 }
@@ -985,6 +1118,9 @@ function updateUserLocation(position) {
   const lon = position.coords.longitude;
   const accuracy = position.coords.accuracy;
   userLocation = { lat, lng: lon };
+  isLocationTracking = true;
+  updateLocationControlState();
+  showLocationNotice(`Location active. Accuracy about ${Math.round(accuracy)}m.`, false);
   const popup = `
     <strong>Your location</strong><br>
     Accuracy: ${Math.round(accuracy)}m<br>
@@ -1021,9 +1157,33 @@ function updateUserLocation(position) {
 
 function handleLocationError(error) {
   const messages = {
-    1: 'Location access denied.',
+    1: 'Location access denied. Enable location permissions to highlight stops up to your nearest stop.',
     2: 'Location unavailable.',
     3: 'Location request timed out.'
   };
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  isLocationTracking = false;
+  updateLocationControlState();
+  userLocation = null;
+  showLocationNotice(messages[error.code] || 'Could not read your location.', true);
   updateStatus(messages[error.code] || 'Could not read your location.', true);
+  refreshRouteOverlay();
+}
+
+function updateLocationControlState() {
+  if (!locationControlButton) {
+    return;
+  }
+
+  locationControlButton.classList.toggle('active', isLocationTracking);
+  locationControlButton.textContent = isLocationTracking ? 'Located' : 'Locate';
+}
+
+function showLocationNotice(message, isError) {
+  els.locationNotice.textContent = message;
+  els.locationNotice.classList.toggle('visible', Boolean(message));
+  els.locationNotice.classList.toggle('error', isError);
 }

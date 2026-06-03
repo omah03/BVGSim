@@ -169,6 +169,43 @@
     #status.error {
       color:#c2410c;
     }
+    #locationNotice {
+      display:none;
+      font-size:12px;
+      line-height:1.35;
+      color:#475569;
+      background:rgba(241,245,249,0.82);
+      border:1px solid rgba(203,213,225,0.82);
+      border-radius:12px;
+      padding:9px 10px;
+    }
+    #locationNotice.visible {
+      display:block;
+    }
+    #locationNotice.error {
+      color:#9a3412;
+      background:rgba(255,247,237,0.9);
+      border-color:rgba(251,146,60,0.46);
+    }
+    #routeInfo {
+      display:none;
+      background:rgba(239,246,255,0.78);
+      border:1px solid rgba(147,197,253,0.58);
+      border-radius:12px;
+      padding:10px;
+      color:#1e3a8a;
+      font-size:12px;
+      line-height:1.35;
+    }
+    #routeInfo.visible {
+      display:block;
+    }
+    #routeInfo strong {
+      display:block;
+      color:#172554;
+      font-size:13px;
+      margin-bottom:3px;
+    }
     #legend {
       position:absolute; bottom:20px; right:20px;
       background:rgba(255,255,255,0.8); padding:10px;
@@ -268,6 +305,8 @@
         </select>
       </div>
       <div id="status">Loading active lines...</div>
+      <div id="routeInfo" aria-live="polite"></div>
+      <div id="locationNotice" role="status" aria-live="polite"></div>
     </div>
   </div>
   <div id="legend">
